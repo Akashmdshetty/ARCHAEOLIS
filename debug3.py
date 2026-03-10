@@ -1,13 +1,14 @@
 import sys, os, traceback
+import yaml, glob
+import numpy as np
+from PIL import Image
+
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 sys.path.insert(0, '.')
 
-try:
-    import yaml, glob
-    import numpy as np
-    from PIL import Image
-    from utils.inference import ArchaeologicalAnalyzer
+from utils.inference import ArchaeologicalAnalyzer
 
+try:
     with open('configs/config.yaml') as f:
         config = yaml.safe_load(f)
 
