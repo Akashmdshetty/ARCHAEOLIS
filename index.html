@@ -1,16 +1,20 @@
 <!DOCTYPE html>
 
-<html lang="en"><head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>AI-Driven Archaeological Site Mapping | Hackathon</title>
-<!-- Fonts: Space Grotesk and Space Mono -->
-<link href="https://fonts.googleapis.com" rel="preconnect"/>
-<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;500;700&amp;family=Space+Mono:ital,wght@0,400;0,700;1,400&amp;display=swap" rel="stylesheet"/>
-<!-- Tailwind CSS v3 CDN -->
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<script>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+  <title>AI-Driven Archaeological Site Mapping | Hackathon</title>
+  <!-- Fonts: Space Grotesk and Space Mono -->
+  <link href="https://fonts.googleapis.com" rel="preconnect" />
+  <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;500;700&amp;family=Space+Mono:ital,wght@0,400;0,700;1,400&amp;display=swap"
+    rel="stylesheet" />
+  <!-- Tailwind CSS v3 CDN -->
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script>
     tailwind.config = {
       theme: {
         extend: {
@@ -31,24 +35,35 @@
       }
     }
   </script>
-<style data-purpose="custom-animations">
+  <style data-purpose="custom-animations">
     @keyframes pulse-slow {
-      0%, 100% { opacity: 0.3; }
-      50% { opacity: 0.6; }
+
+      0%,
+      100% {
+        opacity: 0.3;
+      }
+
+      50% {
+        opacity: 0.6;
+      }
     }
+
     .animate-pulse-slow {
       animation: pulse-slow 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
     }
+
     .glass-panel {
       background: rgba(10, 15, 25, 0.7);
       backdrop-filter: blur(12px);
       border: 1px solid rgba(0, 229, 255, 0.2);
     }
+
     .grid-bg {
       background-image: linear-gradient(rgba(0, 255, 170, 0.05) 1px, transparent 1px),
-                        linear-gradient(90deg, rgba(0, 255, 170, 0.05) 1px, transparent 1px);
+        linear-gradient(90deg, rgba(0, 255, 170, 0.05) 1px, transparent 1px);
       background-size: 40px 40px;
     }
+
     .scan-line {
       width: 100%;
       height: 2px;
@@ -59,29 +74,44 @@
       animation: scan 3s linear infinite;
       z-index: 10;
     }
+
     @keyframes scan {
-      0% { top: 0%; }
-      100% { top: 100%; }
+      0% {
+        top: 0%;
+      }
+
+      100% {
+        top: 100%;
+      }
     }
-  
+
     @keyframes fadeInUp {
       from {
         opacity: 0;
         transform: translateY(20px);
       }
+
       to {
         opacity: 1;
         transform: translateY(0);
       }
     }
+
     .animate-fade-in-up {
       animation: fadeInUp 0.8s ease-out forwards;
       opacity: 0;
     }
+
     @keyframes globalScan {
-      0% { transform: translateY(-100vh); }
-      100% { transform: translateY(100vh); }
+      0% {
+        transform: translateY(-100vh);
+      }
+
+      100% {
+        transform: translateY(100vh);
+      }
     }
+
     .global-scanline {
       position: fixed;
       top: 0;
@@ -94,227 +124,282 @@
       pointer-events: none;
       animation: globalScan 8s linear infinite;
     }
+
     .hover-glow-cyan:hover {
       box-shadow: 0 0 20px rgba(0, 229, 255, 0.6);
       transform: translateY(-2px);
     }
+
     .hover-glow-green:hover {
       box-shadow: 0 0 20px rgba(0, 255, 170, 0.4);
       transform: scale(1.02);
     }
   </style>
 </head>
-<body class="bg-deep-space text-gray-100 font-sans selection:bg-neon-cyan selection:text-deep-space overflow-x-hidden"><div class="global-scanline"></div>
-<!-- BEGIN: Interactive Background -->
-<div class="fixed inset-0 -z-10 overflow-hidden pointer-events-none" data-purpose="background-canvas-container">
-<div class="absolute inset-0 grid-bg"></div>
-<canvas class="absolute inset-0 opacity-40" id="particleCanvas"></canvas>
-</div>
-<!-- END: Interactive Background -->
-<!-- BEGIN: Navigation -->
-<nav class="sticky top-0 z-50 border-b border-neon-cyan/20 glass-panel px-6 py-4" data-purpose="main-nav">
-<div class="max-w-7xl mx-auto flex justify-between items-center">
-<div class="flex items-center gap-2">
-<div class="w-8 h-8 bg-neon-cyan shadow-glow-cyan"></div>
-<span class="font-mono text-neon-cyan font-bold tracking-tighter">ARCHAEOLIS [v1.0.4]</span>
-</div>
-<div class="hidden md:flex gap-8 font-mono text-xs uppercase tracking-widest text-gray-400">
-<a class="hover:text-neon-cyan transition-colors" href="#features">// FEATURES</a>
-<a class="hover:text-neon-cyan transition-colors" href="#demo">// DEMO</a>
-<a class="hover:text-neon-cyan transition-colors" href="#tech">// STACK</a>
-</div>
-</div>
-</nav>
-<!-- END: Navigation -->
-<main>
-<!-- BEGIN: Hero Section -->
-<section class="relative min-h-[90vh] flex flex-col items-center justify-center text-center px-4 pt-20 pb-32">
-<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-neon-cyan/10 rounded-full blur-[120px] pointer-events-none"></div>
-<div class="relative z-10 space-y-8 max-w-4xl">
-<h1 class="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tighter uppercase leading-none">
-          AI-Driven <br/>
-<span class="text-transparent bg-clip-text bg-gradient-to-r from-neon-cyan to-radar-green">Archaeological</span><br/>
+
+<body class="bg-deep-space text-gray-100 font-sans selection:bg-neon-cyan selection:text-deep-space overflow-x-hidden">
+  <div class="global-scanline"></div>
+  <!-- BEGIN: Interactive Background -->
+  <div class="fixed inset-0 -z-10 overflow-hidden pointer-events-none" data-purpose="background-canvas-container">
+    <div class="absolute inset-0 grid-bg"></div>
+    <canvas class="absolute inset-0 opacity-40" id="particleCanvas"></canvas>
+  </div>
+  <!-- END: Interactive Background -->
+  <!-- BEGIN: Navigation -->
+  <nav class="sticky top-0 z-50 border-b border-neon-cyan/20 glass-panel px-6 py-4" data-purpose="main-nav">
+    <div class="max-w-7xl mx-auto flex justify-between items-center">
+      <div class="flex items-center gap-2">
+        <div class="w-8 h-8 bg-neon-cyan shadow-glow-cyan"></div>
+        <span class="font-mono text-neon-cyan font-bold tracking-tighter">ARCHAEOLIS [v1.0.4]</span>
+      </div>
+      <div class="hidden md:flex gap-8 font-mono text-xs uppercase tracking-widest text-gray-400">
+        <a class="hover:text-neon-cyan transition-colors" href="#features">// FEATURES</a>
+        <a class="hover:text-neon-cyan transition-colors" href="#demo">// DEMO</a>
+        <a class="hover:text-neon-cyan transition-colors" href="#tech">// STACK</a>
+      </div>
+    </div>
+  </nav>
+  <!-- END: Navigation -->
+  <main>
+    <!-- BEGIN: Hero Section -->
+    <section class="relative min-h-[90vh] flex flex-col items-center justify-center text-center px-4 pt-20 pb-32">
+      <div
+        class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-neon-cyan/10 rounded-full blur-[120px] pointer-events-none">
+      </div>
+      <div class="relative z-10 space-y-8 max-w-4xl">
+        <div
+          class="inline-block px-3 py-1 border border-radar-green/50 bg-radar-green/10 text-radar-green font-mono text-xs mb-4">
+          SYSTEM_STATUS: ONLINE // HACKATHON_EVENT
+        </div>
+        <h1 class="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tighter uppercase leading-none">
+          AI-Driven <br />
+          <span
+            class="text-transparent bg-clip-text bg-gradient-to-r from-neon-cyan to-radar-green">Archaeological</span><br />
           Site Mapping
         </h1>
-<p class="text-lg md:text-xl text-gray-400 max-w-2xl mx-auto font-light">
-          Discover hidden ruins buried beneath centuries of vegetation and soil using advanced neural networks and high-resolution satellite imagery.
+        <p class="text-lg md:text-xl text-gray-400 max-w-2xl mx-auto font-light">
+          Discover hidden ruins buried beneath centuries of vegetation and soil using advanced neural networks and
+          high-resolution satellite imagery.
         </p>
-<div class="flex flex-col sm:flex-row gap-4 justify-center pt-8">
-<button class="px-8 py-4 bg-neon-cyan text-deep-space font-bold uppercase tracking-widest hover:bg-white transition-all shadow-glow-cyan border border-neon-cyan transition-all duration-300 hover-glow-cyan" onclick="window.location.href='/portal'">
+        <div class="flex flex-col sm:flex-row gap-4 justify-center pt-8">
+          <button
+            class="px-8 py-4 bg-neon-cyan text-deep-space font-bold uppercase tracking-widest hover:bg-white transition-all shadow-glow-cyan border border-neon-cyan transition-all duration-300 hover-glow-cyan"
+            onclick="window.location.href='/portal'">
             Get Started
           </button>
-</div>
-</div>
-</section>
-<!-- END: Hero Section -->
-<!-- BEGIN: 3-Step Process -->
-<section class="py-24 px-4 bg-black/40 border-y border-neon-cyan/10" data-purpose="process-steps" id="demo">
-<div class="max-w-7xl mx-auto">
-<div class="grid md:grid-cols-3 gap-12">
-<!-- Step 1 -->
-<div class="relative group animate-fade-in-up" data-purpose="step-card">
-<div class="text-radar-green font-mono text-4xl mb-6">01.</div>
-<h3 class="text-2xl font-bold mb-4 uppercase tracking-tight">Upload Image</h3>
-<p class="text-gray-400 font-mono text-sm leading-relaxed">Feed high-resolution multispectral or LiDAR satellite imagery into the processing pipeline.</p>
-<div class="mt-8 p-4 border border-dashed border-gray-700 group-hover:border-neon-cyan/50 transition-colors flex justify-center items-center">
-<svg class="w-12 h-12 text-gray-600 group-hover:text-neon-cyan transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path></svg>
-</div>
-</div>
-<!-- Step 2 -->
-<div class="relative group animate-fade-in-up" data-purpose="step-card" style="animation-delay: 0.2s;">
-<div class="text-radar-green font-mono text-4xl mb-6">02.</div>
-<h3 class="text-2xl font-bold mb-4 uppercase tracking-tight">AI Detection</h3>
-<p class="text-gray-400 font-mono text-sm leading-relaxed">Our U-Net based architecture scans for geometric anomalies and subtle soil depressions.</p>
-<div class="mt-8 p-4 border border-dashed border-gray-700 group-hover:border-neon-cyan/50 transition-colors flex justify-center items-center overflow-hidden h-[80px]">
-<div class="w-full h-full bg-neon-cyan/5 relative flex items-center justify-center animate-pulse">
-<div class="scan-line"></div>
-<span class="text-[10px] text-neon-cyan/50 font-mono">ANALYZING_BUFFERS...</span>
-</div>
-</div>
-</div>
-<!-- Step 3 -->
-<div class="relative group animate-fade-in-up" data-purpose="step-card" style="animation-delay: 0.4s;">
-<div class="text-radar-green font-mono text-4xl mb-6">03.</div>
-<h3 class="text-2xl font-bold mb-4 uppercase tracking-tight">View Results</h3>
-<p class="text-gray-400 font-mono text-sm leading-relaxed">Download a tactical heatmap overlay showing the probability of archaeological structures.</p>
-<div class="mt-8 p-4 border border-dashed border-gray-700 group-hover:border-neon-cyan/50 transition-colors flex justify-center items-center">
-<svg class="w-12 h-12 text-gray-600 group-hover:text-neon-cyan transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 20l-5.447-2.724A2 2 0 013 15.482V5.418a2 2 0 011.106-1.789l5.447-2.724a2 2 0 011.894 0l5.447 2.724A2 2 0 0118 5.418v10.064a2 2 0 01-1.106 1.789L11.447 20a2 2 0 01-1.894 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path></svg>
-</div>
-</div>
-</div>
-</div>
-</section>
-<!-- END: 3-Step Process -->
-<!-- BEGIN: Feature Cards -->
-<section class="py-24 px-4 bg-black/30" id="features">
-<div class="max-w-7xl mx-auto text-center mb-16 animate-fade-in-up">
-<h2 class="text-3xl md:text-4xl font-bold uppercase tracking-tighter mb-4 text-white">AI-Based Land Feature Detection</h2>
-<p class="text-gray-400 font-mono text-sm max-w-2xl mx-auto">This helps understand the geographical conditions of archaeological sites. The AI model detects different land regions such as:</p>
-</div>
-<div class="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-<!-- Card 1 -->
-<div class="glass-panel p-8 group hover:border-radar-green transition-all animate-fade-in-up transition-all duration-300 hover-glow-green" data-purpose="feature-card">
-<div class="w-10 h-10 mb-6 flex items-center justify-center border border-neon-cyan group-hover:bg-neon-cyan group-hover:text-deep-space transition-all">
-<span class="font-mono">01</span>
-</div>
-<h4 class="text-xl font-bold mb-2 uppercase">Structural Patterns</h4>
-<p class="text-gray-500 font-mono text-xs">AI identifies sub-surface stone foundations and ancient wall structures.</p>
-</div>
-<!-- Card 2 -->
-<div class="glass-panel p-8 group hover:border-radar-green transition-all animate-fade-in-up transition-all duration-300 hover-glow-green" data-purpose="feature-card" style="animation-delay: 0.1s;">
-<div class="w-10 h-10 mb-6 flex items-center justify-center border border-neon-cyan group-hover:bg-neon-cyan group-hover:text-deep-space transition-all">
-<span class="font-mono">02</span>
-</div>
-<h4 class="text-xl font-bold mb-2 uppercase">Vegetation</h4>
-<p class="text-gray-500 font-mono text-xs">Analyzes 'crop-marks' and plant health that strongly indicate underlying buried structures.</p>
-</div>
-<!-- Card 3 -->
-<div class="glass-panel p-8 group hover:border-radar-green transition-all animate-fade-in-up transition-all duration-300 hover-glow-green" data-purpose="feature-card" style="animation-delay: 0.2s;">
-<div class="w-10 h-10 mb-6 flex items-center justify-center border border-neon-cyan group-hover:bg-neon-cyan group-hover:text-deep-space transition-all">
-<span class="font-mono">03</span>
-</div>
-<h4 class="text-xl font-bold mb-2 uppercase">Water Bodies</h4>
-<p class="text-gray-500 font-mono text-xs">Detects historical and current hydrological features like paleochannels and rivers.</p>
-</div>
-<!-- Card 4 -->
-<div class="glass-panel p-8 group hover:border-radar-green transition-all animate-fade-in-up transition-all duration-300 hover-glow-green" data-purpose="feature-card" style="animation-delay: 0.3s;">
-<div class="w-10 h-10 mb-6 flex items-center justify-center border border-neon-cyan group-hover:bg-neon-cyan group-hover:text-deep-space transition-all">
-<span class="font-mono">04</span>
-</div>
-<h4 class="text-xl font-bold mb-2 uppercase">Open Land</h4>
-<p class="text-gray-500 font-mono text-xs">Classifies bare earth and clear terrain to understand geographical conditions and erosion.</p>
-</div>
-</div>
-</section>
-<!-- END: Feature Cards -->
-<!-- BEGIN: Map Preview Widget -->
-<section class="py-24 px-4 overflow-hidden" id="map-section">
-<div class="max-w-5xl mx-auto glass-panel border-radar-green/30 p-2 relative">
-<div class="flex items-center justify-between p-4 border-b border-radar-green/20">
-<div class="flex items-center gap-3">
-<div class="w-2 h-2 rounded-full bg-radar-green animate-pulse"></div>
-<span class="font-mono text-[10px] tracking-widest text-radar-green">GEOSPATIAL_VIEWER_ACTIVE</span>
-</div>
-<button class="text-[10px] font-mono text-neon-cyan hover:underline transition-all duration-300 hover-glow-cyan">RE-CENTER_GPS</button>
-</div>
-<div class="relative h-[400px] w-full bg-deep-space overflow-hidden group">
-<!-- Fake Map Graphic -->
-<div class="absolute inset-0 opacity-40 bg-cover" style="background-image: url('https://placehold.co/1200x800/05090F/1e293b?text=DYNAMIC+MAP+CANVAS')"></div>
-<div class="absolute inset-0 flex items-center justify-center">
-<div class="relative">
-<!-- Radar Circles -->
-<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 border border-radar-green/20 rounded-full scale-150 animate-ping opacity-30"></div>
-<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 border border-radar-green/10 rounded-full"></div>
-<!-- Target Cursor -->
-<div class="relative z-10 w-24 h-24 border border-radar-green/50 flex items-center justify-center">
-<div class="w-1 h-1 bg-radar-green"></div>
-<div class="absolute -top-1 -left-1 w-3 h-3 border-t-2 border-l-2 border-radar-green"></div>
-<div class="absolute -bottom-1 -right-1 w-3 h-3 border-b-2 border-r-2 border-radar-green"></div>
-</div>
-</div>
-</div>
-<!-- Tech HUD Overlays -->
-<div class="absolute bottom-6 left-6 font-mono text-[9px] text-radar-green/70 space-y-1">
-<div>LAT: 37.7749° N</div>
-<div>LNG: 122.4194° W</div>
-<div>ALT: 420.5m</div>
-</div>
-<!-- Overlay button -->
-<div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
-<button onclick="window.location.href='/portal'" class="px-6 py-3 border border-radar-green text-radar-green font-mono uppercase text-sm tracking-widest hover:bg-radar-green hover:text-deep-space transition-all transition-all duration-300 hover-glow-cyan">
-               Open Full Dashboard
-             </button>
-</div>
-</div>
-</div>
-</section>
-<!-- END: Map Preview Widget -->
-<!-- BEGIN: Tech Stack -->
-<section class="py-20 px-4 border-t border-neon-cyan/10" id="tech">
-<div class="max-w-7xl mx-auto flex flex-col items-center">
-<h5 class="font-mono text-xs text-gray-500 uppercase tracking-widest mb-12">Engineered With</h5>
-<div class="flex flex-wrap justify-center gap-12 md:gap-24 opacity-60">
-<div class="flex items-center gap-2 group cursor-default">
-<span class="text-2xl font-bold font-mono group-hover:text-neon-cyan transition-colors">PYTHON</span>
-</div>
-<div class="flex items-center gap-2 group cursor-default">
-<span class="text-2xl font-bold font-mono group-hover:text-neon-cyan transition-colors">PYTORCH</span>
-</div>
-<div class="flex items-center gap-2 group cursor-default">
-<span class="text-2xl font-bold font-mono group-hover:text-neon-cyan transition-colors">YOLOv8</span>
-</div>
-<div class="flex items-center gap-2 group cursor-default">
-<span class="text-2xl font-bold font-mono group-hover:text-neon-cyan transition-colors">U-NET++</span>
-</div>
-</div>
-</div>
-</section>
-<!-- END: Tech Stack -->
-</main>
-<!-- BEGIN: Footer -->
-<footer class="py-16 px-6 border-t border-neon-cyan/20 glass-panel">
-<div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
-<div class="space-y-2 text-center md:text-left">
-<div class="font-mono text-neon-cyan font-bold tracking-tighter">ARCHAEOLIS LABS</div>
-<p class="text-xs text-gray-500 font-mono">© 2024 DEEP-SEARCH HACKATHON ENTRY</p>
-</div>
-<div class="flex gap-6 font-mono text-[10px] uppercase tracking-tighter text-gray-400">
-<a class="hover:text-radar-green transition-colors" href="https://github.com/Akashmdshetty/ARCHAEOLIS" target="_blank">Github Repo</a>
-<a class="hover:text-radar-green transition-colors" href="#">API Docs</a>
-<a class="hover:text-radar-green transition-colors" href="#">Privacy Protocol</a>
-</div>
-<div class="text-center md:text-right">
-<p class="text-xs font-mono text-gray-500">PROTOTYPE BUILD: v1.0.4-BETA</p>
-<div class="mt-2 inline-flex items-center gap-1">
-<div class="w-1.5 h-1.5 rounded-full bg-radar-green"></div>
-<span class="text-[9px] text-radar-green font-mono">SERVERS_OPTIMIZED</span>
-</div>
-</div>
-</div>
-</footer>
-<!-- END: Footer -->
-<!-- BEGIN: Canvas Particle Animation -->
-<script data-purpose="particle-animation">
+        </div>
+      </div>
+    </section>
+    <!-- END: Hero Section -->
+    <!-- BEGIN: 3-Step Process -->
+    <section class="py-24 px-4 bg-black/40 border-y border-neon-cyan/10" data-purpose="process-steps" id="demo">
+      <div class="max-w-7xl mx-auto">
+        <div class="grid md:grid-cols-3 gap-12">
+          <!-- Step 1 -->
+          <div class="relative group animate-fade-in-up" data-purpose="step-card">
+            <div class="text-radar-green font-mono text-4xl mb-6">01.</div>
+            <h3 class="text-2xl font-bold mb-4 uppercase tracking-tight">Upload Image</h3>
+            <p class="text-gray-400 font-mono text-sm leading-relaxed">Feed high-resolution multispectral or LiDAR
+              satellite imagery into the processing pipeline.</p>
+            <div
+              class="mt-8 p-4 border border-dashed border-gray-700 group-hover:border-neon-cyan/50 transition-colors flex justify-center items-center">
+              <svg class="w-12 h-12 text-gray-600 group-hover:text-neon-cyan transition-colors" fill="none"
+                stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                  stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+              </svg>
+            </div>
+          </div>
+          <!-- Step 2 -->
+          <div class="relative group animate-fade-in-up" data-purpose="step-card" style="animation-delay: 0.2s;">
+            <div class="text-radar-green font-mono text-4xl mb-6">02.</div>
+            <h3 class="text-2xl font-bold mb-4 uppercase tracking-tight">AI Detection</h3>
+            <p class="text-gray-400 font-mono text-sm leading-relaxed">Our U-Net based architecture scans for geometric
+              anomalies and subtle soil depressions.</p>
+            <div
+              class="mt-8 p-4 border border-dashed border-gray-700 group-hover:border-neon-cyan/50 transition-colors flex justify-center items-center overflow-hidden h-[80px]">
+              <div class="w-full h-full bg-neon-cyan/5 relative flex items-center justify-center animate-pulse">
+                <div class="scan-line"></div>
+                <span class="text-[10px] text-neon-cyan/50 font-mono">ANALYZING_BUFFERS...</span>
+              </div>
+            </div>
+          </div>
+          <!-- Step 3 -->
+          <div class="relative group animate-fade-in-up cursor-pointer hover:bg-radar-green/5 transition-colors p-4 -m-4 rounded-xl" data-purpose="step-card" style="animation-delay: 0.4s;" onclick="window.location.href='/history'">
+            <div class="text-radar-green font-mono text-4xl mb-6">03.</div>
+            <h3 class="text-2xl font-bold mb-4 uppercase tracking-tight group-hover:text-neon-cyan transition-colors">View Results</h3>
+            <p class="text-gray-400 font-mono text-sm leading-relaxed">View a detailed log and tactical heatmap overlays showing the history of archaeological structures.</p>
+            <div
+              class="mt-8 p-4 border border-dashed border-gray-700 group-hover:border-radar-green/80 group-hover:bg-radar-green/10 transition-colors flex justify-center items-center">
+              <svg class="w-12 h-12 text-gray-600 group-hover:text-radar-green transition-colors" fill="none"
+                stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  d="M9 20l-5.447-2.724A2 2 0 013 15.482V5.418a2 2 0 011.106-1.789l5.447-2.724a2 2 0 011.894 0l5.447 2.724A2 2 0 0118 5.418v10.064a2 2 0 01-1.106 1.789L11.447 20a2 2 0 01-1.894 0z"
+                  stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <!-- END: 3-Step Process -->
+    <!-- BEGIN: Feature Cards -->
+    <section class="py-24 px-4 bg-black/30" id="features">
+      <div class="max-w-7xl mx-auto text-center mb-16 animate-fade-in-up">
+        <h2 class="text-3xl md:text-4xl font-bold uppercase tracking-tighter mb-4 text-white">AI-Based Land Feature
+          Detection</h2>
+        <p class="text-gray-400 font-mono text-sm max-w-2xl mx-auto">This helps understand the geographical conditions
+          of archaeological sites. The AI model detects different land regions such as:</p>
+      </div>
+      <div class="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <!-- Card 1 -->
+        <div
+          class="glass-panel p-8 group hover:border-radar-green transition-all animate-fade-in-up transition-all duration-300 hover-glow-green"
+          data-purpose="feature-card">
+          <div
+            class="w-10 h-10 mb-6 flex items-center justify-center border border-neon-cyan group-hover:bg-neon-cyan group-hover:text-deep-space transition-all">
+            <span class="font-mono">01</span>
+          </div>
+          <h4 class="text-xl font-bold mb-2 uppercase">Structural Patterns</h4>
+          <p class="text-gray-500 font-mono text-xs">AI identifies sub-surface stone foundations and ancient wall
+            structures.</p>
+        </div>
+        <!-- Card 2 -->
+        <div
+          class="glass-panel p-8 group hover:border-radar-green transition-all animate-fade-in-up transition-all duration-300 hover-glow-green"
+          data-purpose="feature-card" style="animation-delay: 0.1s;">
+          <div
+            class="w-10 h-10 mb-6 flex items-center justify-center border border-neon-cyan group-hover:bg-neon-cyan group-hover:text-deep-space transition-all">
+            <span class="font-mono">02</span>
+          </div>
+          <h4 class="text-xl font-bold mb-2 uppercase">Vegetation</h4>
+          <p class="text-gray-500 font-mono text-xs">Analyzes 'crop-marks' and plant health that strongly indicate
+            underlying buried structures.</p>
+        </div>
+        <!-- Card 3 -->
+        <div
+          class="glass-panel p-8 group hover:border-radar-green transition-all animate-fade-in-up transition-all duration-300 hover-glow-green"
+          data-purpose="feature-card" style="animation-delay: 0.2s;">
+          <div
+            class="w-10 h-10 mb-6 flex items-center justify-center border border-neon-cyan group-hover:bg-neon-cyan group-hover:text-deep-space transition-all">
+            <span class="font-mono">03</span>
+          </div>
+          <h4 class="text-xl font-bold mb-2 uppercase">Water Bodies</h4>
+          <p class="text-gray-500 font-mono text-xs">Detects historical and current hydrological features like
+            paleochannels and rivers.</p>
+        </div>
+        <!-- Card 4 -->
+        <div
+          class="glass-panel p-8 group hover:border-radar-green transition-all animate-fade-in-up transition-all duration-300 hover-glow-green"
+          data-purpose="feature-card" style="animation-delay: 0.3s;">
+          <div
+            class="w-10 h-10 mb-6 flex items-center justify-center border border-neon-cyan group-hover:bg-neon-cyan group-hover:text-deep-space transition-all">
+            <span class="font-mono">04</span>
+          </div>
+          <h4 class="text-xl font-bold mb-2 uppercase">Open Land</h4>
+          <p class="text-gray-500 font-mono text-xs">Classifies bare earth and clear terrain to understand geographical
+            conditions and erosion.</p>
+        </div>
+      </div>
+    </section>
+    <!-- END: Feature Cards -->
+    <!-- BEGIN: Map Preview Widget -->
+    <section class="py-24 px-4 overflow-hidden" id="map-section">
+      <div class="max-w-5xl mx-auto glass-panel border-radar-green/30 p-2 relative">
+        <div class="flex items-center justify-between p-4 border-b border-radar-green/20">
+          <div class="flex items-center gap-3">
+            <div class="w-2 h-2 rounded-full bg-radar-green animate-pulse"></div>
+            <span class="font-mono text-[10px] tracking-widest text-radar-green">GEOSPATIAL_VIEWER_ACTIVE</span>
+          </div>
+          <button
+            class="text-[10px] font-mono text-neon-cyan hover:underline transition-all duration-300 hover-glow-cyan">RE-CENTER_GPS</button>
+        </div>
+        <div class="relative h-[400px] w-full bg-deep-space overflow-hidden group">
+          <!-- Fake Map Graphic -->
+          <div class="absolute inset-0 opacity-40 bg-cover"
+            style="background-image: url('https://placehold.co/1200x800/05090F/1e293b?text=DYNAMIC+MAP+CANVAS')"></div>
+          <div class="absolute inset-0 flex items-center justify-center">
+            <div class="relative">
+              <!-- Radar Circles -->
+              <div
+                class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 border border-radar-green/20 rounded-full scale-150 animate-ping opacity-30">
+              </div>
+              <div
+                class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 border border-radar-green/10 rounded-full">
+              </div>
+              <!-- Target Cursor -->
+              <div class="relative z-10 w-24 h-24 border border-radar-green/50 flex items-center justify-center">
+                <div class="w-1 h-1 bg-radar-green"></div>
+                <div class="absolute -top-1 -left-1 w-3 h-3 border-t-2 border-l-2 border-radar-green"></div>
+                <div class="absolute -bottom-1 -right-1 w-3 h-3 border-b-2 border-r-2 border-radar-green"></div>
+              </div>
+            </div>
+          </div>
+          <!-- Tech HUD Overlays -->
+          <div class="absolute bottom-6 left-6 font-mono text-[9px] text-radar-green/70 space-y-1">
+            <div>LAT: 37.7749° N</div>
+            <div>LNG: 122.4194° W</div>
+            <div>ALT: 420.5m</div>
+          </div>
+          <!-- Overlay button -->
+          <div
+            class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
+            <button onclick="window.location.href='/portal'"
+              class="px-6 py-3 border border-radar-green text-radar-green font-mono uppercase text-sm tracking-widest hover:bg-radar-green hover:text-deep-space transition-all transition-all duration-300 hover-glow-cyan">
+              Open Full Dashboard
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+    <!-- END: Map Preview Widget -->
+    <!-- BEGIN: Tech Stack -->
+    <section class="py-20 px-4 border-t border-neon-cyan/10" id="tech">
+      <div class="max-w-7xl mx-auto flex flex-col items-center">
+        <h5 class="font-mono text-xs text-gray-500 uppercase tracking-widest mb-12">Engineered With</h5>
+        <div class="flex flex-wrap justify-center gap-12 md:gap-24 opacity-60">
+          <div class="flex items-center gap-2 group cursor-default">
+            <span class="text-2xl font-bold font-mono group-hover:text-neon-cyan transition-colors">PYTHON</span>
+          </div>
+          <div class="flex items-center gap-2 group cursor-default">
+            <span class="text-2xl font-bold font-mono group-hover:text-neon-cyan transition-colors">PYTORCH</span>
+          </div>
+          <div class="flex items-center gap-2 group cursor-default">
+            <span class="text-2xl font-bold font-mono group-hover:text-neon-cyan transition-colors">YOLOv8</span>
+          </div>
+          <div class="flex items-center gap-2 group cursor-default">
+            <span class="text-2xl font-bold font-mono group-hover:text-neon-cyan transition-colors">U-NET++</span>
+          </div>
+        </div>
+      </div>
+    </section>
+    <!-- END: Tech Stack -->
+  </main>
+  <!-- BEGIN: Footer -->
+  <footer class="py-16 px-6 border-t border-neon-cyan/20 glass-panel">
+    <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
+      <div class="space-y-2 text-center md:text-left">
+        <div class="font-mono text-neon-cyan font-bold tracking-tighter">ARCHAEOLIS LABS</div>
+        <p class="text-xs text-gray-500 font-mono">© 2024 DEEP-SEARCH HACKATHON ENTRY</p>
+      </div>
+      <div class="flex gap-6 font-mono text-[10px] uppercase tracking-tighter text-gray-400">
+        <a class="hover:text-radar-green transition-colors" href="https://github.com/Akashmdshetty/ARCHAEOLIS"
+          target="_blank">Github Repo</a>
+        <a class="hover:text-radar-green transition-colors" href="#">API Docs</a>
+        <a class="hover:text-radar-green transition-colors" href="#">Privacy Protocol</a>
+      </div>
+      <div class="text-center md:text-right">
+        <p class="text-xs font-mono text-gray-500">PROTOTYPE BUILD: v1.0.4-BETA</p>
+        <div class="mt-2 inline-flex items-center gap-1">
+          <div class="w-1.5 h-1.5 rounded-full bg-radar-green"></div>
+          <span class="text-[9px] text-radar-green font-mono">SERVERS_OPTIMIZED</span>
+        </div>
+      </div>
+    </div>
+  </footer>
+  <!-- END: Footer -->
+  <!-- BEGIN: Canvas Particle Animation -->
+  <script data-purpose="particle-animation">
     const canvas = document.getElementById('particleCanvas');
     const ctx = canvas.getContext('2d');
     let particles = [];
@@ -348,7 +433,7 @@
     function animate() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = '#00E5FF';
-      
+
       particles.forEach((p, index) => {
         // Anti-gravity logic
         let dx = mouse.x - p.x;
@@ -395,5 +480,7 @@
     init();
     animate();
   </script>
-<!-- END: Canvas Particle Animation -->
-</body></html>
+  <!-- END: Canvas Particle Animation -->
+</body>
+
+</html>

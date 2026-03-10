@@ -11,14 +11,38 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 import yaml
 import numpy as np
 import cv2
+from datetime import datetime
 from PIL import Image
 from flask import Flask, request, jsonify, send_from_directory, render_template_string
+from pymongo import MongoClient
+from dotenv import load_dotenv
 
 from utils.inference import ArchaeologicalAnalyzer
 from utils.visualization_utils import overlay_mask, draw_boxes, overlay_heatmap
 
-# ── Init Flask ────────────────────────────────────────────────
+load_dotenv()
+
+# ── Init Flask & MongoDB ──────────────────────────────────────
 app = Flask(__name__, static_folder='.', static_url_path='')
+
+MONGO_URI = os.getenv("MONGO_URI")
+mongo_client = None
+db = None
+history_collection = None
+
+if MONGO_URI:
+    try:
+        mongo_client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+        # Test connection
+        mongo_client.server_info()
+        db = mongo_client["archaeolis"]
+        history_collection = db["scan_history"]
+        print("[ARCHAEOLIS] Successfully connected to MongoDB Atlas.")
+    except Exception as e:
+        print(f"[ARCHAEOLIS] WARNING: Failed to connect to MongoDB. Error: {e}")
+else:
+    print("[ARCHAEOLIS] WARNING: No MONGO_URI found in environment. History saving disabled.")
+
 
 # ── Load model once ───────────────────────────────────────────
 with open('configs/config.yaml') as f:
@@ -52,6 +76,10 @@ def portal():
 @app.route('/results')
 def results():
     return send_from_directory('.', 'results.html')
+
+@app.route('/history')
+def history():
+    return send_from_directory('.', 'history.html')
 
 @app.route('/api/analyze', methods=['POST'])
 def analyze():
@@ -89,7 +117,7 @@ def analyze():
     ], dtype=np.float32)
     probs = probs / (probs.sum() + 1e-5)
 
-    return jsonify({
+    response_data = {
         'composite':       to_b64(composite),
         'segmentation':    to_b64(seg),
         'erosion_heatmap': to_b64(eros),
@@ -104,7 +132,35 @@ def analyze():
         'labels':          labels,
         'probs':           [float(p) for p in probs],
         'risk_summary':    res['risk_summary'],
-    })
+        'lat':             float(request.form.get('lat', 48.8566)),
+        'lng':             float(request.form.get('lng', 2.3522)),
+    }
+
+    # Save to MongoDB
+    if history_collection is not None:
+        try:
+            record = {
+                "timestamp": datetime.utcnow(),
+                "filename": request.files['image'].filename,
+                "lat": response_data['lat'],
+                "lng": response_data['lng'],
+                "primary_feature": response_data['primary_feature'],
+                "probabilities": {
+                    "ruin": response_data['ruin_prob'],
+                    "erosion": response_data['erosion_risk'],
+                    "landslide": response_data['landslide_risk'],
+                    "fault": response_data['fault_prob'],
+                    "vegetation": response_data['veg_prob'],
+                    "water": response_data['water_prob'],
+                    "urban": response_data['urban_prob']
+                },
+                "risk_summary": response_data['risk_summary']
+            }
+            history_collection.insert_one(record)
+        except Exception as e:
+            print(f"[ARCHAEOLIS] Error saving to MongoDB: {e}")
+
+    return jsonify(response_data)
 
 @app.route('/api/map_scan')
 def map_scan():
@@ -155,6 +211,18 @@ def map_scan():
         'probs':           [float(p) for p in probs],
         'risk_summary':    res['risk_summary'],
     })
+
+@app.route('/api/history', methods=['GET'])
+def get_history():
+    if history_collection is None:
+        return jsonify({'error': 'MongoDB not configured'}), 503
+    try:
+        # Fetch latest 20 scans
+        cursor = history_collection.find({}, {"_id": 0}).sort("timestamp", -1).limit(20)
+        history = list(cursor)
+        return jsonify({'history': history})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 if __name__ == '__main__':

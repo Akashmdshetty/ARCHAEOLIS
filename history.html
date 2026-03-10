@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+  <title>Scan History | ARCHAEOLIS</title>
+  <link href="https://fonts.googleapis.com" rel="preconnect" />
+  <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;500;700&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <style>
+    body { background-color: #05090F; color: #f1f5f9; font-family: 'Space Grotesk', sans-serif; }
+    .font-mono { font-family: 'Space Mono', monospace; }
+    .glass-panel { background: rgba(10, 15, 25, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(0, 229, 255, 0.2); }
+    .neon-text { color: #00E5FF; }
+    .radar-text { color: #00FFAA; }
+    .grid-bg {
+      background-image: linear-gradient(rgba(0, 255, 170, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 255, 170, 0.05) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+  </style>
+</head>
+<body class="min-h-screen relative overflow-x-hidden">
+  
+  <div class="fixed inset-0 -z-10 grid-bg"></div>
+
+  <!-- Header -->
+  <header class="border-b border-neon-cyan/20 glass-panel px-6 py-4 sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto flex justify-between items-center">
+      <div class="flex items-center gap-3">
+        <a href="/" class="text-neon-cyan/60 hover:text-neon-cyan transition-colors mr-4">← Back to Home</a>
+        <div class="w-2 h-2 rounded-full bg-radar-green animate-pulse"></div>
+        <h1 class="text-xl font-bold tracking-tighter uppercase neon-text">
+          ARCH-AI <span class="radar-text text-sm font-mono ml-2">History Log</span>
+        </h1>
+      </div>
+      <div class="text-[10px] font-mono radar-text tracking-widest uppercase flex flex-col items-end">
+        <span>MONGO_DB: CONNECTED</span>
+        <span>ATLAS_CLUSTER: ACTIVE</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="max-w-7xl mx-auto px-6 py-12">
+    <div class="mb-10">
+      <h2 class="text-3xl font-bold uppercase tracking-tight mb-2">Historical Scans</h2>
+      <p class="font-mono text-sm text-slate-500">Retrieving intelligence logs from global database cluster...</p>
+    </div>
+
+    <!-- Error state -->
+    <div id="error-container" class="hidden glass-panel p-6 border-red-500/30 text-red-400 font-mono text-sm">
+      [SYSTEM_ERROR]: Unable to connect to database cluster. Please verify MONGO_URI configuration in backend.
+    </div>
+
+    <!-- Loading state -->
+    <div id="loading" class="flex flex-col items-center justify-center py-20 opacity-50">
+      <div class="w-16 h-16 border-2 border-neon-cyan/20 border-t-neon-cyan rounded-full animate-spin mb-4"></div>
+      <span class="font-mono text-xs tracking-widest uppercase">Querying Data...</span>
+    </div>
+
+    <!-- Grid Container for Records -->
+    <div id="history-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 hidden">
+      <!-- Cards rendered via JS -->
+    </div>
+
+  </main>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      const grid = document.getElementById('history-grid');
+      const loader = document.getElementById('loading');
+      const errBox = document.getElementById('error-container');
+
+      try {
+        const response = await fetch('/api/history');
+        const data = await response.json();
+
+        if (!response.ok || data.error) {
+          throw new Error(data.error || 'Failed to fetch history');
+        }
+
+        const history = data.history;
+        loader.classList.add('hidden');
+
+        if (history.length === 0) {
+          grid.innerHTML = `<div class="col-span-full text-center py-12 font-mono text-slate-500">NO SCANS DETECTED IN DATABASE.</div>`;
+          grid.classList.remove('hidden');
+          return;
+        }
+
+        history.forEach(scan => {
+          const date = new Date(scan.timestamp).toLocaleString();
+          const pFeature = scan.primary_feature || "Unknown";
+          
+          const maxProb = Object.entries(scan.probabilities).reduce((max, [key, val]) => val > max.val ? {key, val} : max, {key: '', val: 0});
+          const confidence = (maxProb.val * 100).toFixed(1) + "%";
+
+          const card = document.createElement('div');
+          card.className = "glass-panel p-5 group hover:border-radar-green/50 transition-colors cursor-default relative overflow-hidden";
+          card.innerHTML = `
+            <div class="absolute top-0 left-0 w-1 h-full bg-neon-cyan group-hover:bg-radar-green transition-colors"></div>
+            
+            <div class="flex justify-between items-start mb-4">
+              <div>
+                <div class="text-[10px] font-mono text-slate-500 uppercase mb-1">${date}</div>
+                <h3 class="text-lg font-bold text-white tracking-tight uppercase">${pFeature} Detected</h3>
+              </div>
+              <div class="bg-radar-green/10 text-radar-green border border-radar-green/30 px-2 py-1 rounded text-[10px] font-mono font-bold">
+                ${confidence} Conf.
+              </div>
+            </div>
+
+            <div class="space-y-2 mb-4">
+              <div class="flex justify-between text-xs font-mono border-b border-white/5 pb-1">
+                <span class="text-slate-400">Target File</span>
+                <span class="truncate ml-4 text-neon-cyan max-w-[120px]">${scan.filename || 'map_scan.jpg'}</span>
+              </div>
+              <div class="flex justify-between text-xs font-mono border-b border-white/5 pb-1">
+                <span class="text-slate-400">Coordinates</span>
+                <span class="text-white">${scan.lat.toFixed(4)}° N, ${scan.lng.toFixed(4)}° E</span>
+              </div>
+              <div class="flex justify-between text-xs font-mono border-b border-white/5 pb-1">
+                <span class="text-slate-400">Risk Assessment</span>
+                <span class="${scan.risk_summary === 'CRITICAL' ? 'text-red-400' : 'text-radar-green'} uppercase">${scan.risk_summary}</span>
+              </div>
+            </div>
+
+            <div class="bg-black/40 p-3 rounded font-mono text-[9px] text-slate-400 space-y-1">
+               <div class="flex justify-between"><span>Structural Anomaly:</span> <span>${(scan.probabilities.ruin * 100).toFixed(1)}%</span></div>
+               <div class="flex justify-between"><span>Vegetation Signal:</span> <span>${(scan.probabilities.vegetation * 100).toFixed(1)}%</span></div>
+               <div class="flex justify-between"><span>Geological Fault:</span> <span>${(scan.probabilities.fault * 100).toFixed(1)}%</span></div>
+            </div>
+          `;
+          grid.appendChild(card);
+        });
+
+        grid.classList.remove('hidden');
+
+      } catch (err) {
+        console.error("History Error:", err);
+        loader.classList.add('hidden');
+        errBox.classList.remove('hidden');
+        errBox.innerText = `[SYSTEM_ERROR]: ${err.message}`;
+      }
+    });
+  </script>
+</body>
+</html>
