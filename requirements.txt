@@ -2,7 +2,7 @@ torch
 torchvision
 numpy
 pandas
-opencv-python
+opencv-python-headless
 scikit-learn
 matplotlib
 umap-learn
@@ -16,3 +16,6 @@ tqdm
 scipy
 plotly
 gunicorn
+Flask
+pymongo
+python-dotenv
