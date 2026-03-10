@@ -347,13 +347,6 @@ if st.session_state.mode == 'Home':
                   width:600px;height:600px;background:rgba(0,229,255,0.08);
                   border-radius:50%;filter:blur(120px);pointer-events:none;"></div>
       <div style="position:relative;z-index:10;max-width:900px;">
-        <!-- Status badge -->
-        <div style="display:inline-block;padding:4px 12px;
-                    border:1px solid rgba(0,255,170,0.5);background:rgba(0,255,170,0.08);
-                    color:#00FFAA;font-family:'Space Mono',monospace;font-size:0.6rem;
-                    letter-spacing:0.18em;text-transform:uppercase;margin-bottom:2rem;">
-          SYSTEM_STATUS: ONLINE // HACKATHON_EVENT
-        </div>
         <!-- Heading -->
         <h1 style="font-family:'Space Grotesk',sans-serif;font-weight:700;
                    font-size:clamp(3rem,8vw,6rem);letter-spacing:-0.05em;
