@@ -103,6 +103,124 @@ def load_models():
 
 analyzer, config = load_models()
 
+import streamlit.components.v1 as components
+
+def inject_particle_bg():
+    components.html("""
+    <script>
+    if (window.parent && !window.parent.document.getElementById('particleCanvas')) {
+        const parentDoc = window.parent.document;
+        const container = parentDoc.createElement('div');
+        container.style.position = 'fixed';
+        container.style.top = '0';
+        container.style.left = '0';
+        container.style.width = '100vw';
+        container.style.height = '100vh';
+        container.style.zIndex = '-1';
+        container.style.pointerEvents = 'none';
+        container.style.overflow = 'hidden';
+        
+        const grid = parentDoc.createElement('div');
+        grid.style.position = 'absolute';
+        grid.style.top = '0';
+        grid.style.left = '0';
+        grid.style.right = '0';
+        grid.style.bottom = '0';
+        grid.style.backgroundImage = 'linear-gradient(rgba(0, 255, 170, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 255, 170, 0.05) 1px, transparent 1px)';
+        grid.style.backgroundSize = '40px 40px';
+        container.appendChild(grid);
+
+        const canvas = parentDoc.createElement('canvas');
+        canvas.id = 'particleCanvas';
+        canvas.style.position = 'absolute';
+        canvas.style.top = '0';
+        canvas.style.left = '0';
+        canvas.style.opacity = '0.4';
+        container.appendChild(canvas);
+        
+        parentDoc.body.appendChild(container);
+
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+        const particleCount = 80;
+        let mouse = { x: -1000, y: -1000 };
+
+        const updateMouse = (e) => {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+        };
+        
+        parentDoc.addEventListener('mousemove', updateMouse, true);
+        window.addEventListener('mousemove', updateMouse, true);
+
+        function init() {
+            canvas.width = parentDoc.defaultView.innerWidth;
+            canvas.height = parentDoc.defaultView.innerHeight;
+            particles = [];
+            for (let i = 0; i < particleCount; i++) {
+                particles.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    size: Math.random() * 2,
+                    speedX: (Math.random() - 0.5) * 0.3,
+                    speedY: (Math.random() - 0.5) * 0.3
+                });
+            }
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#00E5FF';
+
+            particles.forEach((p, index) => {
+                let dx = mouse.x - p.x;
+                let dy = mouse.y - p.y;
+                let distance = Math.sqrt(dx * dx + dy * dy);
+                let forceDirectionX = dx / distance;
+                let forceDirectionY = dy / distance;
+                let maxDistance = 150;
+                let force = (maxDistance - distance) / maxDistance;
+                if (distance < maxDistance) {
+                    p.x -= forceDirectionX * force * 5;
+                    p.y -= forceDirectionY * force * 5;
+                }
+
+                p.x += p.speedX;
+                p.y += p.speedY;
+
+                if (p.x < 0) p.x = canvas.width;
+                if (p.x > canvas.width) p.x = 0;
+                if (p.y < 0) p.y = canvas.height;
+                if (p.y > canvas.height) p.y = 0;
+
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+
+                for (let j = index + 1; j < particles.length; j++) {
+                    const p2 = particles[j];
+                    const dist = Math.hypot(p.x - p2.x, p.y - p2.y);
+                    if (dist < 150) {
+                        ctx.strokeStyle = `rgba(0, 255, 170, ${1 - dist / 150 * 0.3})`;
+                        ctx.lineWidth = 0.5;
+                        ctx.beginPath();
+                        ctx.moveTo(p.x, p.y);
+                        ctx.lineTo(p2.x, p2.y);
+                        ctx.stroke();
+                    }
+                }
+            });
+            parentDoc.defaultView.requestAnimationFrame(animate);
+        }
+
+        parentDoc.defaultView.addEventListener('resize', init);
+        setTimeout(init, 500);
+        init();
+        animate();
+    }
+    </script>
+    """, height=0)
+
 # --- App Logic & State ---
 if 'mode' not in st.session_state:
     st.session_state.mode = 'Home'
@@ -111,8 +229,20 @@ if 'registry' not in st.session_state:
 if 'use_real_model' not in st.session_state:
     st.session_state.use_real_model = True
 
+# Handle navigation from the HTML landing page
+nav = st.query_params.get("nav")
+if nav == "app":
+    st.session_state.mode = 'Portal'
+    st.session_state.portal_tab_selection = "Manual Image Upload"
+    st.query_params.clear()
+elif nav == "map":
+    st.session_state.mode = 'Portal'
+    st.session_state.portal_tab_selection = "Interactive Map Discovery"
+    st.query_params.clear()
+
 # --- UI Header ---
-st.markdown(f"""
+if st.session_state.mode != 'Home':
+    st.markdown(f"""
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
         <h2 style="font-family: 'Orbitron', sans-serif; color: #f8fafc; margin: 0;">ARCHAEO<span style="color: #60a5fa;">LIS</span></h2>
         <div>
@@ -177,39 +307,36 @@ def run_analysis_pipeline(image_input):
 # --- NAVIGATION MODES ---
 
 if st.session_state.mode == 'Home':
-    col1, col2 = st.columns([3, 2])
+    # Force the Streamlit block container to have zero padding so the HTML is 100% full-bleed
+    st.markdown("""
+        <style>
+            .block-container { 
+                padding: 0 !important; 
+                max-width: 100% !important; 
+            }
+            [data-testid="stAppViewBlockContainer"] {
+                padding: 0 !important;
+                max-width: 100% !important;
+            }
+            [data-testid="stHeader"] {
+                display: none !important;
+            }
+            [data-testid="stDecoration"] {
+                display: none !important;
+            }
+        </style>
+    """, unsafe_allow_html=True)
     
-    with col1:
-        st.markdown('<h1 class="hero-text">PIONEERING THE FUTURE OF DISCOVERY</h1>', unsafe_allow_html=True)
-        st.markdown("""
-        ### AI-Driven Archaeological Site Mapping
-        Our platform uses cutting-edge **Self-Supervised Learning (BYOL)** to detect ancient civilizations hidden beneath the surface. 
-        Transforming raw satellite imagery into actionable archaeological intelligence.
-        """, unsafe_allow_html=True)
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            st.markdown('<div class="stat-card"><div class="stat-value">94.2%</div><div style="font-size: 0.8rem; opacity: 0.7;">SSL Accuracy</div></div>', unsafe_allow_html=True)
-        with c2:
-            st.markdown('<div class="stat-card"><div class="stat-value">1,277</div><div style="font-size: 0.8rem; opacity: 0.7;">Processed Sites</div></div>', unsafe_allow_html=True)
-        with c3:
-            st.markdown('<div class="stat-card"><div class="stat-value">< 1s</div><div style="font-size: 0.8rem; opacity: 0.7;">Real-time Analysis</div></div>', unsafe_allow_html=True)
-            
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("🚀 ENTER ANALYSIS PORTAL", use_container_width=True):
-            st.session_state.mode = 'Portal'
-            st.rerun()
-
-    with col2:
-        # Show a sample result image as a hero image
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-        st.image("classification/sample_results.png" if os.path.exists("classification/sample_results.png") else "https://via.placeholder.com/600x400/1e293b/60a5fa?text=Archaeolis+AI", 
-                 caption="AI Vision identifying burial mounds in the Balkan Peninsula.", use_column_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+    # Render the high-fidelity HTML UI/UX exactly as provided
+    with open("dashboard/landing.html", "r", encoding="utf-8") as f:
+        html_code = f.read()
+    
+    # Render borderless full-width component (height covers the whole document)
+    components.html(html_code, height=2800, scrolling=False)
 
 elif st.session_state.mode == 'Portal':
+    inject_particle_bg()
+    
     st.sidebar.markdown(f"""
         <div class="glass-card" style="padding: 1rem; border-radius: 10px;">
             <p style="margin:0; font-family:'Orbitron'; font-size:0.9rem;">PORTAL NAVIGATION</p>
@@ -228,7 +355,17 @@ elif st.session_state.mode == 'Portal':
         for i, site in enumerate(st.session_state.registry[-5:]):
             st.sidebar.info(f"📍 {site['type']} ({site['lat']:.2f}, {site['lon']:.2f})")
 
-    portal_tab = st.selectbox("Analysis Source", ["Interactive Map Discovery", "Manual Image Upload", "Subsurface Core Logs"])
+    tabs = ["Interactive Map Discovery", "Manual Image Upload"]
+    if "portal_tab_selection" not in st.session_state:
+        st.session_state.portal_tab_selection = "Manual Image Upload"
+    
+    try:
+        default_index = tabs.index(st.session_state.portal_tab_selection)
+    except ValueError:
+        default_index = 1
+        
+    portal_tab = st.selectbox("Analysis Source", tabs, index=default_index)
+    st.session_state.portal_tab_selection = portal_tab
     
     if portal_tab == "Manual Image Upload":
         st.markdown('<div class="glass-card">', unsafe_allow_html=True)
@@ -357,22 +494,4 @@ Integrity Score: {site_entry['integrity']}
                             file_name=f"site_report_{lat:.2f}_{lon:.2f}.md",
                             mime="text/markdown"
                         )
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    elif portal_tab == "Subsurface Core Logs":
-        # Integrating the previous Subsurface Analysis
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-        data_root = "data/temp_extract"
-        logs = get_borehole_data(data_root)
-        if logs:
-            log_type = st.sidebar.selectbox("Borehole ID", list(logs.keys()))
-            df = logs[log_type]
-            depth_col = 'DEPT' if 'DEPT' in df.columns else 'DEPTH_WSF'
-            curves = [c for c in df.columns if c.lower() not in ['dept', 'depth_wsf']]
-            sel = st.multiselect("Geophysical Curves", curves, default=curves[:2])
-            fig = px.line(df, x=sel, y=depth_col, title=f"Expedition 347 | Subsurface Profile")
-            fig.update_yaxes(autorange="reversed")
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("No borehole logs detected.")
         st.markdown('</div>', unsafe_allow_html=True)
