@@ -376,11 +376,11 @@ if st.session_state.mode == 'Home':
     # ── CTA Buttons (Streamlit buttons render inline) ──────────
     col_gap1, col_b1, col_b2, col_gap2 = st.columns([3,1,1,3])
     with col_b1:
-        if st.button("[ Try Demo ]", key="hero_cta", use_container_width=True):
+        if st.button("[ Get Started ]", key="hero_cta", use_container_width=True):
             st.session_state.mode = 'Portal'
             st.rerun()
     with col_b2:
-        if st.button("[ View Map ]", key="hero_map", use_container_width=True):
+        if st.button("[ Get Started ]", key="hero_map", use_container_width=True):
             st.session_state.mode = 'Portal'
             st.rerun()
 
