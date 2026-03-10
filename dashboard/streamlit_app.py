@@ -450,31 +450,35 @@ if st.session_state.mode == 'Home':
     # ── Feature Cards ──────────────────────────────────────────
     st.markdown("""
     <div id="features" style="background:rgba(0,0,0,0.3);padding:6rem 2rem;">
+      <div style="max-width:1280px;margin:0 auto;text-align:center;margin-bottom:4rem;">
+        <h2 style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:2.5rem;text-transform:uppercase;color:#f8fafc;margin-bottom:1rem;">AI-Based Land Feature Detection</h2>
+        <p style="color:#94a3b8;font-family:'Space Mono',monospace;font-size:0.85rem;max-width:800px;margin:0 auto;line-height:1.6;">This helps understand the geographical conditions of archaeological sites. The AI model detects different land regions such as:</p>
+      </div>
       <div style="max-width:1280px;margin:0 auto;
                   display:grid;grid-template-columns:repeat(4,1fr);gap:1.5rem;">
 
         <div class="glass-panel" style="padding:2rem;" onmouseover="this.style.borderColor='rgba(0,255,170,0.6)';this.style.boxShadow='0 0 20px rgba(0,255,170,0.3)'" onmouseout="this.style.borderColor='rgba(0,229,255,0.2)';this.style.boxShadow='none'">
           <div style="width:40px;height:40px;border:1px solid #00E5FF;display:flex;align-items:center;justify-content:center;margin-bottom:1.5rem;font-family:'Space Mono',monospace;font-size:0.75rem;">01</div>
-          <h4 style="font-weight:700;text-transform:uppercase;font-size:1.1rem;margin-bottom:0.5rem;">Ruins Detection</h4>
-          <p style="color:#64748b;font-family:'Space Mono',monospace;font-size:0.7rem;line-height:1.7;">98.4% Accuracy in identifying sub-surface stone foundations using multi-spectral bands.</p>
+          <h4 style="font-weight:700;text-transform:uppercase;font-size:1.1rem;margin-bottom:0.5rem;">Structural Patterns</h4>
+          <p style="color:#64748b;font-family:'Space Mono',monospace;font-size:0.7rem;line-height:1.7;">AI identifies sub-surface stone foundations and ancient wall structures.</p>
         </div>
 
         <div class="glass-panel" style="padding:2rem;" onmouseover="this.style.borderColor='rgba(0,255,170,0.6)';this.style.boxShadow='0 0 20px rgba(0,255,170,0.3)'" onmouseout="this.style.borderColor='rgba(0,229,255,0.2)';this.style.boxShadow='none'">
           <div style="width:40px;height:40px;border:1px solid #00E5FF;display:flex;align-items:center;justify-content:center;margin-bottom:1.5rem;font-family:'Space Mono',monospace;font-size:0.75rem;">02</div>
-          <h4 style="font-weight:700;text-transform:uppercase;font-size:1.1rem;margin-bottom:0.5rem;">Artifact ID</h4>
-          <p style="color:#64748b;font-family:'Space Mono',monospace;font-size:0.7rem;line-height:1.7;">Object detection for surface scatter patterns of pottery and masonry fragments.</p>
+          <h4 style="font-weight:700;text-transform:uppercase;font-size:1.1rem;margin-bottom:0.5rem;">Vegetation</h4>
+          <p style="color:#64748b;font-family:'Space Mono',monospace;font-size:0.7rem;line-height:1.7;">Analyzes 'crop-marks' and plant health that strongly indicate underlying buried structures.</p>
         </div>
 
         <div class="glass-panel" style="padding:2rem;" onmouseover="this.style.borderColor='rgba(0,255,170,0.6)';this.style.boxShadow='0 0 20px rgba(0,255,170,0.3)'" onmouseout="this.style.borderColor='rgba(0,229,255,0.2)';this.style.boxShadow='none'">
           <div style="width:40px;height:40px;border:1px solid #00E5FF;display:flex;align-items:center;justify-content:center;margin-bottom:1.5rem;font-family:'Space Mono',monospace;font-size:0.75rem;">03</div>
-          <h4 style="font-weight:700;text-transform:uppercase;font-size:1.1rem;margin-bottom:0.5rem;">Vegetation Analysis</h4>
-          <p style="color:#64748b;font-family:'Space Mono',monospace;font-size:0.7rem;line-height:1.7;">Analyzing 'crop-marks' where vegetation health indicates underlying structures.</p>
+          <h4 style="font-weight:700;text-transform:uppercase;font-size:1.1rem;margin-bottom:0.5rem;">Water Bodies</h4>
+          <p style="color:#64748b;font-family:'Space Mono',monospace;font-size:0.7rem;line-height:1.7;">Detects historical and current hydrological features like paleochannels and rivers.</p>
         </div>
 
         <div class="glass-panel" style="padding:2rem;" onmouseover="this.style.borderColor='rgba(0,255,170,0.6)';this.style.boxShadow='0 0 20px rgba(0,255,170,0.3)'" onmouseout="this.style.borderColor='rgba(0,229,255,0.2)';this.style.boxShadow='none'">
           <div style="width:40px;height:40px;border:1px solid #00E5FF;display:flex;align-items:center;justify-content:center;margin-bottom:1.5rem;font-family:'Space Mono',monospace;font-size:0.75rem;">04</div>
-          <h4 style="font-weight:700;text-transform:uppercase;font-size:1.1rem;margin-bottom:0.5rem;">Erosion Risk</h4>
-          <p style="color:#64748b;font-family:'Space Mono',monospace;font-size:0.7rem;line-height:1.7;">Predictive modeling for site degradation due to rainfall and climate shifts.</p>
+          <h4 style="font-weight:700;text-transform:uppercase;font-size:1.1rem;margin-bottom:0.5rem;">Open Land</h4>
+          <p style="color:#64748b;font-family:'Space Mono',monospace;font-size:0.7rem;line-height:1.7;">Classifies bare earth and clear terrain to understand geographical conditions and erosion.</p>
         </div>
 
       </div>
