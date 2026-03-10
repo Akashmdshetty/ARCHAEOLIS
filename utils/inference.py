@@ -143,7 +143,7 @@ class ArchaeologicalAnalyzer:
         
         # Area thresholding from segmentation map
         ruin_mask = (seg_probs[0, 1] > 0.5).float()      # 1 where Ruins
-        veg_mask  = (seg_probs[0, 2] > 0.5).float()      # 1 where Vegetation
+        veg_mask = (seg_probs[0, 2] > 0.4).float()       # 1 where Vegetation
         
         total_pixels = float(ruin_mask.numel())
         ruin_prob = float(ruin_mask.sum()) / total_pixels

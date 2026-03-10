@@ -129,7 +129,21 @@ def make_proxy_targets(imgs_tensor: torch.Tensor, out_size: int = 224):
     fault_t     = torch.tensor(np.stack(fault_masks),  dtype=torch.float32).unsqueeze(1)
     ruin_t      = torch.tensor(np.stack(ruin_masks),   dtype=torch.float32).unsqueeze(1)
     landslide_t = torch.tensor(landslide_scores,       dtype=torch.float32).unsqueeze(1)
-    return erosion_t, fault_t, ruin_t, landslide_t
+    
+    # We also need a vegetation proxy to train the 3-class segmentation output
+    veg_masks_arr = []
+    for i in range(B):
+        img_np = (denorm[i].permute(1,2,0).numpy() * 255).astype(np.uint8)
+        R = img_np[:,:,0].astype(np.float32)
+        G = img_np[:,:,1].astype(np.float32)
+        B_ch = img_np[:,:,2].astype(np.float32)
+        denom = R + G + B_ch + 1e-5
+        green_ratio = G / denom
+        veg = (green_ratio > 0.38).astype(np.float32)
+        veg_masks_arr.append(veg)
+    veg_t = torch.tensor(np.stack(veg_masks_arr), dtype=torch.float32).unsqueeze(1)
+
+    return erosion_t, fault_t, ruin_t, veg_t, landslide_t
 
 
 # ── Training ──────────────────────────────────────────────────────────────
@@ -211,7 +225,7 @@ def train():
     out_dir = cfg['analysis_heads']['checkpoint_dir']
     os.makedirs(out_dir, exist_ok=True)
 
-    epochs = cfg['analysis_heads']['epochs']
+    epochs = 5 # cfg['analysis_heads']['epochs']
     print(f"[Analysis] Training for {epochs} epoch(s)...\n")
 
     for epoch in range(epochs):
@@ -226,11 +240,12 @@ def train():
             imgs = imgs.to(device)
 
             # Generate proxy targets (CPU ops)
-            erosion_targets, fault_targets, ruin_targets, landslide_targets = make_proxy_targets(
+            erosion_targets, fault_targets, ruin_targets, veg_targets, landslide_targets = make_proxy_targets(
                 imgs, out_size=cfg['dataset']['image_size'])
             erosion_targets  = erosion_targets.to(device)
             fault_targets    = fault_targets.to(device)
             ruin_targets     = ruin_targets.to(device)
+            veg_targets      = veg_targets.to(device)
             landslide_targets = landslide_targets.to(device)
 
             # Encoder forward (no grad)
@@ -244,14 +259,19 @@ def train():
             fault_out = outputs['faults']          # [B,1,H,W]
 
             # ── Losses ────────────────────────────────────────────────────
-            # Segmentation uses the dedicated ruin geometric targets
+            # Segmentation uses the dedicated ruin and veg geometric targets
             H, W = seg_out.shape[2], seg_out.shape[3]
             ruin_resized = torch.nn.functional.interpolate(
                 ruin_targets, size=(H, W), mode='bilinear', align_corners=False)
+            veg_resized = torch.nn.functional.interpolate(
+                veg_targets, size=(H, W), mode='bilinear', align_corners=False)
             
             # Create a 3-class target: 0=bg, 1=ruins, 2=veg
-            # For simplicity, we just force class 1 where ruin_proxy is high
-            seg_pseudo = (ruin_resized.squeeze(1) > 0.4).long()   # [B,H,W]
+            B = seg_out.size(0)
+            seg_pseudo = torch.zeros((B, H, W), dtype=torch.long, device=device)
+            seg_pseudo[veg_resized.squeeze(1) > 0.4] = 2   # Vegetation first
+            seg_pseudo[ruin_resized.squeeze(1) > 0.4] = 1  # Ruins overwrite vegetation (stricter structure)
+            
             l_seg = seg_loss_fn(seg_out, seg_pseudo)
 
             # Erosion heatmap
