@@ -171,6 +171,12 @@ class ArchaeologicalAnalyzer:
         # Resize back to original
         seg_pil  = Image.fromarray(seg_rgb).resize(orig_size, Image.NEAREST)
         seg_overlay = self._blend_overlay(pil_image, seg_pil, alpha=0.45)
+        
+        # Extracted RAW masks for precise overlays on frontend
+        ruin_mask_raw = (seg_class == 1).astype(np.uint8)
+        veg_mask_raw  = (seg_class == 2).astype(np.uint8)
+        ruin_mask_np  = np.array(Image.fromarray(ruin_mask_raw).resize(orig_size, Image.NEAREST)).astype(np.float32)
+        veg_mask_np   = np.array(Image.fromarray(veg_mask_raw).resize(orig_size, Image.NEAREST)).astype(np.float32)
 
         # ── Erosion heatmap ────────────────────────────────────────────────
         eros_np = erosion_map[0, 0].cpu().numpy()
@@ -189,6 +195,8 @@ class ArchaeologicalAnalyzer:
             "landslide_risk":       landslide_risk,
             "fault_probability":    fault_prob,
             "segmentation_overlay": seg_overlay,
+            "raw_ruin_mask":        ruin_mask_np,
+            "raw_veg_mask":         veg_mask_np,
             "erosion_heatmap":      erosion_heatmap,
             "fault_mask":           fault_rgb,
             "risk_summary":         summary,

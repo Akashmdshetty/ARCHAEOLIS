@@ -88,7 +88,7 @@ st.set_page_config(page_title="Archaeolis | AI Site Mapping", layout="wide", ini
 local_css()
 
 # --- Model Loading ---
-@st.cache_resource
+@st.cache_resource(show_spinner="Loading Archaeological AI Models...")
 def load_models():
     with open('configs/config.yaml', 'r') as f:
         config = yaml.safe_load(f)
@@ -265,14 +265,12 @@ def run_analysis_pipeline(image_input):
     res    = analyzer.analyze(pil_image)
 
     # Derive legacy-compatible fields for the display code below
-    # Segmentation overlay → ruins mask (class-1 probability as a 0/1 mask)
-    seg_overlay = res['segmentation_overlay']                  # [H,W,3] uint8
     eros_map    = res['erosion_heatmap']                       # [H,W,3] uint8
     fault_map   = res['fault_mask']                            # [H,W,3] uint8
 
-    # Build a red-channel ruins mask (single-channel float) for overlay_mask()
-    ru_mask  = (seg_overlay[:,:,0].astype(float) / 255.0 * (seg_overlay[:,:,0] > 100)).astype(np.float32)
-    ve_mask  = (seg_overlay[:,:,1].astype(float) / 255.0 * (seg_overlay[:,:,1] > 100)).astype(np.float32)
+    # Use raw masks provided by inference directly!
+    ru_mask  = res['raw_ruin_mask']
+    ve_mask  = res['raw_veg_mask']
     fa_mask  = (fault_map[:,:,0].astype(float)   / 255.0).astype(np.float32)
     er_heat  = (eros_map[:,:,0].astype(float)    / 255.0).astype(np.float32)
 
