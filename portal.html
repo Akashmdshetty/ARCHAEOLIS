@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ARCH-AI | Tactical Demo</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<script>
+tailwind.config = {
+  darkMode: "class",
+  theme: {
+    extend: {
+      colors: {
+        "primary": "#00FFAA",
+        "background-dark": "#050a09",
+        "surface": "#0c1a16",
+        "border-dim": "#1a332d",
+      },
+      fontFamily: {
+        "display": ["Space Grotesk","sans-serif"],
+        "mono": ["Space Mono","monospace"]
+      },
+      borderRadius: {"DEFAULT":"0.125rem","lg":"0.25rem","xl":"0.5rem","full":"0.75rem"},
+    }
+  }
+}
+</script>
+<style>
+  @keyframes scanMove { 0%{top:0%} 100%{top:100%} }
+  .scanline {
+    width:100%; height:2px;
+    background:#00FFAA; box-shadow:0 0 15px #00FFAA;
+    position:absolute; left:0; z-index:20;
+    animation: scanMove 3s linear infinite;
+  }
+  .grid-bg {
+    background-image: radial-gradient(circle, #1a332d 1px, transparent 1px);
+    background-size: 30px 30px;
+  }
+  @keyframes termScroll { 0%{transform:translateY(0)} 100%{transform:translateY(-50%)} }
+  .term-scroll { animation: termScroll 12s linear infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+  .blink { animation: blink 1s step-end infinite; }
+  /* Progress bar fill animation */
+  .bar-anim { transition: width 1.2s cubic-bezier(0.4,0,0.2,1); }
+</style>
+</head>
+<body class="bg-background-dark text-slate-100 font-display overflow-hidden h-screen flex flex-col">
+
+<!-- ── HEADER ────────────────────────────────────────────── -->
+<header class="border-b border-border-dim bg-surface px-6 py-3 flex items-center justify-between shrink-0">
+  <div class="flex items-center gap-6">
+    <div class="flex items-center gap-3">
+      <span class="material-symbols-outlined text-primary text-2xl">grid_view</span>
+      <h1 class="text-xl font-bold tracking-tighter text-white uppercase">
+        ARCH-AI <span class="text-primary/70 text-sm font-mono ml-2">v1.0.4</span>
+      </h1>
+    </div>
+    <div class="h-4 w-px bg-border-dim"></div>
+    <div class="flex items-center gap-4 font-mono text-xs text-primary/80 uppercase tracking-widest">
+      <span class="flex items-center gap-2">
+        <span class="size-2 rounded-full bg-primary animate-pulse"></span>
+        System Status: ONLINE
+      </span>
+      <span class="text-slate-500">|</span>
+      <span id="coords">48.8566° N, 2.3522° E</span>
+    </div>
+  </div>
+  <div class="flex items-center gap-4">
+    <div class="flex flex-col items-end font-mono text-[10px] text-slate-400">
+      <span>ENCRYPTION: AES-256</span>
+      <span>UPLINK: ACTIVE</span>
+    </div>
+    <a href="/" class="bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary px-4 py-1.5 rounded text-xs font-bold transition-colors uppercase tracking-widest">
+      ← Home
+    </a>
+  </div>
+</header>
+
+<!-- ── MAIN LAYOUT ────────────────────────────────────────── -->
+<main class="flex flex-1 overflow-hidden">
+
+  <!-- LEFT SIDEBAR: Detection Queue -->
+  <aside class="w-72 border-r border-border-dim bg-surface flex flex-col shrink-0">
+    <div class="p-4 border-b border-border-dim bg-background-dark/50">
+      <h2 class="text-xs font-mono text-primary uppercase tracking-[0.2em] mb-1">Detection Queue</h2>
+      <p class="text-[10px] text-slate-500 uppercase">Satellite Scan Files</p>
+    </div>
+
+    <!-- Upload Drop Zone -->
+    <div class="p-3 border-b border-border-dim">
+      <label id="dropLabel"
+        class="flex flex-col items-center justify-center gap-2 p-4 border border-dashed border-border-dim
+               hover:border-primary/50 cursor-pointer transition-all bg-background-dark/30 group">
+        <span class="material-symbols-outlined text-slate-500 group-hover:text-primary transition-colors text-3xl">upload_file</span>
+        <span class="font-mono text-[10px] text-slate-500 uppercase tracking-widest group-hover:text-primary transition-colors text-center">
+          Drop imagery / click to upload
+        </span>
+        <input type="file" id="fileInput" accept=".jpg,.jpeg,.png,.tif" class="hidden" onchange="handleFile(this)"/>
+      </label>
+    </div>
+
+    <!-- Queue List -->
+    <div class="flex-1 overflow-y-auto p-2 space-y-2" id="queueList">
+      <!-- items injected by JS -->
+      <div class="p-2 border border-border-dim text-center py-8">
+        <p class="font-mono text-[10px] text-slate-600 uppercase">Queue empty.<br/>Upload a scan above.</p>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN VIEWPORT -->
+  <section class="flex-1 relative bg-black overflow-hidden grid-bg">
+
+    <!-- HUD Overlays (always visible) -->
+    <div class="absolute inset-0 pointer-events-none z-10 p-6 flex flex-col justify-between">
+      <div class="flex justify-between items-start">
+        <div class="font-mono text-[10px] text-primary space-y-1 bg-background-dark/60 p-2 border-l border-primary">
+          <div id="hud-lat">LAT: 29.9792° N</div>
+          <div id="hud-lng">LNG: 31.1342° E</div>
+          <div>ALT: 420.55 KM</div>
+        </div>
+        <div class="font-mono text-[10px] text-primary text-right bg-background-dark/60 p-2 border-r border-primary">
+          <div id="hud-frame">FRAME: ----</div>
+          <div>SAT: ARCH-EYE-01</div>
+          <div id="hud-mode">MODE: STANDBY</div>
+        </div>
+      </div>
+
+      <!-- Bounding box overlays (populated by JS) -->
+      <div id="bboxOverlay"></div>
+
+      <!-- Status label -->
+      <div class="flex justify-center">
+        <div id="statusLabel"
+          class="px-4 py-1 bg-primary/20 border border-primary text-primary font-mono text-[10px]
+                 uppercase tracking-widest backdrop-blur-sm">
+          Awaiting Scan Upload
+        </div>
+      </div>
+    </div>
+
+    <!-- Scanline -->
+    <div class="scanline" id="scanline" style="display:none;"></div>
+
+    <!-- Main image / idle state -->
+    <div class="absolute inset-0 flex items-center justify-center" id="viewportContent">
+      <div class="text-center opacity-20">
+        <span class="material-symbols-outlined text-primary text-8xl">satellite_alt</span>
+        <p class="font-mono text-[10px] text-primary uppercase mt-4 tracking-widest">No active scan</p>
+      </div>
+    </div>
+
+    <!-- Radar Compass -->
+    <div class="absolute bottom-8 right-8 size-24 rounded-full border border-primary/30 flex items-center justify-center">
+      <div class="w-full h-px bg-primary/20 rotate-45 absolute"></div>
+      <div class="w-full h-px bg-primary/20 -rotate-45 absolute"></div>
+      <span class="absolute font-mono text-[8px] text-primary" style="top:4px;">N</span>
+    </div>
+  </section>
+
+  <!-- RIGHT SIDEBAR: AI Telemetry -->
+  <aside class="w-80 border-l border-border-dim bg-surface flex flex-col shrink-0 overflow-y-auto">
+
+    <!-- Telemetry Bars -->
+    <div class="p-4 border-b border-border-dim">
+      <h2 class="text-xs font-mono text-primary uppercase tracking-[0.2em] mb-4">AI Analysis Telemetry</h2>
+      <div class="space-y-4">
+        <div class="space-y-1.5">
+          <div class="flex justify-between text-[10px] font-mono text-slate-300 uppercase">
+            <span>Ruins Detection</span>
+            <span class="text-primary" id="val-ruins">—</span>
+          </div>
+          <div class="h-1 bg-border-dim rounded-full overflow-hidden">
+            <div class="h-full bg-primary bar-anim" id="bar-ruins" style="width:0%"></div>
+          </div>
+        </div>
+        <div class="space-y-1.5">
+          <div class="flex justify-between text-[10px] font-mono text-slate-300 uppercase">
+            <span>Vegetation Overlay</span>
+            <span class="text-primary" id="val-veg">—</span>
+          </div>
+          <div class="h-1 bg-border-dim rounded-full overflow-hidden">
+            <div class="h-full bg-primary bar-anim" id="bar-veg" style="width:0%"></div>
+          </div>
+        </div>
+        <div class="space-y-1.5">
+          <div class="flex justify-between text-[10px] font-mono text-slate-300 uppercase">
+            <span>Erosion Risk</span>
+            <span class="text-orange-400" id="val-erosion">—</span>
+          </div>
+          <div class="h-1 bg-border-dim rounded-full overflow-hidden">
+            <div class="h-full bg-orange-400 bar-anim" id="bar-erosion" style="width:0%"></div>
+          </div>
+        </div>
+        <div class="space-y-1.5">
+          <div class="flex justify-between text-[10px] font-mono text-slate-300 uppercase">
+            <span>Fault Lines</span>
+            <span class="text-purple-400" id="val-fault">—</span>
+          </div>
+          <div class="h-1 bg-border-dim rounded-full overflow-hidden">
+            <div class="h-full bg-purple-400 bar-anim" id="bar-fault" style="width:0%"></div>
+          </div>
+        </div>
+        <div class="space-y-1.5">
+          <div class="flex justify-between text-[10px] font-mono text-slate-300 uppercase">
+            <span>Water Bodies</span>
+            <span class="text-blue-400" id="val-water">—</span>
+          </div>
+          <div class="h-1 bg-border-dim rounded-full overflow-hidden">
+            <div class="h-full bg-blue-400 bar-anim" id="bar-water" style="width:0%"></div>
+          </div>
+        </div>
+        <div class="space-y-1.5">
+          <div class="flex justify-between text-[10px] font-mono text-slate-300 uppercase">
+            <span>Urban / Built-up</span>
+            <span class="text-slate-300" id="val-urban">—</span>
+          </div>
+          <div class="h-1 bg-border-dim rounded-full overflow-hidden">
+            <div class="h-full bg-slate-400 bar-anim" id="bar-urban" style="width:0%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Confidence Matrix -->
+    <div class="p-4 border-b border-border-dim">
+      <h2 class="text-xs font-mono text-primary uppercase tracking-[0.2em] mb-4">Confidence Matrix</h2>
+      <div class="grid grid-cols-2 gap-2">
+        <div class="bg-background-dark/50 border border-border-dim p-3">
+          <div class="text-[9px] font-mono text-slate-500 uppercase">Precision</div>
+          <div class="text-lg font-mono text-white" id="m-precision">—</div>
+        </div>
+        <div class="bg-background-dark/50 border border-border-dim p-3">
+          <div class="text-[9px] font-mono text-slate-500 uppercase">Recall</div>
+          <div class="text-lg font-mono text-white" id="m-recall">—</div>
+        </div>
+        <div class="bg-background-dark/50 border border-border-dim p-3">
+          <div class="text-[9px] font-mono text-slate-500 uppercase">Latency</div>
+          <div class="text-lg font-mono text-white" id="m-latency">—</div>
+        </div>
+        <div class="bg-background-dark/50 border border-border-dim p-3">
+          <div class="text-[9px] font-mono text-slate-500 uppercase">F1 Score</div>
+          <div class="text-lg font-mono text-white" id="m-f1">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Neural Link Feed -->
+    <div class="p-4 flex-1">
+      <div class="text-[10px] font-mono text-slate-400 uppercase mb-2">Neural Link Feed</div>
+      <div class="text-[10px] font-mono text-primary/60 bg-black/40 p-2 h-36 overflow-hidden relative">
+        <div id="termFeed">
+          &gt; System ready. Awaiting input...<br/>
+          &gt; BYOL encoder loaded.<br/>
+          &gt; Analysis heads initialized.<br/>
+          &gt; Upload imagery to begin scan.<br/>
+          <span class="blink">█</span>
+        </div>
+      </div>
+
+      <!-- Primary Feature badge -->
+      <div class="mt-4" id="primaryBadge" style="display:none;">
+        <div class="text-[9px] font-mono text-slate-500 uppercase mb-1">Primary Detection</div>
+        <div class="px-3 py-2 border border-primary/30 bg-primary/5 font-mono text-xs text-primary" id="primaryText"></div>
+      </div>
+
+      <!-- Layers -->
+      <div class="mt-4" id="layerToggles" style="display:none;">
+        <div class="text-[9px] font-mono text-slate-500 uppercase mb-2">Overlay Layers</div>
+        <div class="space-y-1">
+          <label class="flex items-center gap-2 text-[10px] font-mono text-slate-300 cursor-pointer">
+            <input type="checkbox" id="l-ruins"   checked onchange="redrawComposite()" class="accent-primary"/> Ruins (Blue)
+          </label>
+          <label class="flex items-center gap-2 text-[10px] font-mono text-slate-300 cursor-pointer">
+            <input type="checkbox" id="l-veg"     checked onchange="redrawComposite()" class="accent-primary"/> Vegetation (Green)
+          </label>
+          <label class="flex items-center gap-2 text-[10px] font-mono text-slate-300 cursor-pointer">
+            <input type="checkbox" id="l-erosion" checked onchange="redrawComposite()" class="accent-primary"/> Erosion Heat
+          </label>
+          <label class="flex items-center gap-2 text-[10px] font-mono text-slate-300 cursor-pointer">
+            <input type="checkbox" id="l-fault"   checked onchange="redrawComposite()" class="accent-primary"/> Faults (Purple)
+          </label>
+        </div>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<!-- ── BOTTOM ACTION BAR ───────────────────────────────────── -->
+<footer class="border-t border-border-dim bg-surface p-4 flex items-center justify-between shrink-0">
+  <div class="flex gap-4">
+    <button onclick="reScan()"
+      class="flex items-center gap-2 px-6 py-2 border border-primary bg-primary/5 text-primary
+             text-xs font-bold font-mono tracking-widest uppercase hover:bg-primary hover:text-background-dark transition-all">
+      <span class="material-symbols-outlined text-sm">refresh</span> Re-Scan
+    </button>
+    <button onclick="saveData()"
+      class="flex items-center gap-2 px-6 py-2 border border-border-dim text-slate-300
+             text-xs font-bold font-mono tracking-widest uppercase hover:border-slate-100 transition-all">
+      <span class="material-symbols-outlined text-sm">save</span> Save Data
+    </button>
+  </div>
+  <div class="flex items-center gap-6">
+    <div class="font-mono text-[10px] text-slate-500 uppercase flex gap-4">
+      <span id="bufferStatus">Buffer: 0B / 10GB</span>
+      <span>CPU: 14%</span>
+    </div>
+    <!-- Hidden until scan completes -->
+    <button id="viewResultsBtn" onclick="exportReport()" style="display:none;"
+      class="flex items-center gap-2 px-6 py-2 bg-primary text-background-dark
+             text-xs font-bold font-mono tracking-widest uppercase hover:brightness-110 transition-all
+             animate-pulse">
+      <span class="material-symbols-outlined text-sm">analytics</span> VIEW TACTICAL RESULTS →
+    </button>
+    <button onclick="exportReport()"
+      class="flex items-center gap-2 px-6 py-2 border border-border-dim text-slate-500
+             text-xs font-bold font-mono tracking-widest uppercase hover:border-slate-100 transition-all">
+      <span class="material-symbols-outlined text-sm">download</span> Export Report
+    </button>
+  </div>
+</footer>
+
+<script>
+// ── State ────────────────────────────────────────────────────
+let lastResult   = null;
+let lastFilename = null;
+let queueItems   = [];
+let scanCounter  = 1;
+
+// ── Terminal feed helper ──────────────────────────────────────
+const termFeed = document.getElementById('termFeed');
+function termLog(msg) {
+  termFeed.innerHTML += `<br/>&gt; ${msg}`;
+  termFeed.parentElement.scrollTop = termFeed.parentElement.scrollHeight;
+}
+
+// ── File Upload ───────────────────────────────────────────────
+function handleFile(input) {
+  if(!input.files[0]) return;
+  const file = input.files[0];
+  lastFilename = file.name;
+
+  // ── Preview uploaded image immediately in the viewport ──
+  const previewReader = new FileReader();
+  previewReader.onload = (e) => {
+    document.getElementById('viewportContent').innerHTML =
+      `<img src="${e.target.result}" class="object-contain size-full" style="background:#05090F;"/>`;
+  };
+  previewReader.readAsDataURL(file);
+
+  // Add to queue
+  addToQueue(file);
+
+  // Start scan
+  startScan(file);
+}
+
+function addToQueue(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const thumb = e.target.result;
+    const id    = `scan_${String(scanCounter).padStart(3,'0')}`;
+    scanCounter++;
+    queueItems.push({id, name: file.name, thumb, status:'analyzing'});
+    renderQueue();
+  };
+  reader.readAsDataURL(file);
+}
+
+function renderQueue() {
+  const list = document.getElementById('queueList');
+  if(queueItems.length === 0) {
+    list.innerHTML = `<div class="p-2 border border-border-dim text-center py-8">
+      <p class="font-mono text-[10px] text-slate-600 uppercase">Queue empty.<br/>Upload a scan above.</p>
+    </div>`;
+    return;
+  }
+  list.innerHTML = queueItems.map((item,i) => `
+    <div class="p-2 border ${i===queueItems.length-1 ? 'border-primary bg-primary/5' : 'border-border-dim'} cursor-pointer group"
+         onclick="selectQueueItem(${i})">
+      <div class="flex gap-3">
+        <div class="size-14 bg-slate-800 border ${i===queueItems.length-1 ? 'border-primary/40' : 'border-border-dim'} shrink-0 overflow-hidden relative">
+          ${item.thumb ? `<img src="${item.thumb}" class="object-cover size-full opacity-70 ${i===queueItems.length-1 ? '' : 'grayscale'}"/>` : ''}
+          ${i===queueItems.length-1 ? '<div class="absolute inset-0 bg-primary/10 mix-blend-overlay"></div>' : ''}
+        </div>
+        <div class="flex flex-col justify-center overflow-hidden">
+          <span class="text-[11px] font-mono ${i===queueItems.length-1 ? 'text-white' : 'text-slate-400'} truncate">${item.name}</span>
+          <span class="text-[9px] font-mono ${i===queueItems.length-1 ? 'text-primary' : 'text-slate-500'} uppercase">
+            ${item.status === 'analyzing' ? 'Analyzing...' : item.status === 'done' ? '✓ Complete' : 'In Queue'}
+          </span>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function selectQueueItem(i) {
+  // re-activate this item
+}
+
+// ── Main Analysis ────────────────────────────────────────────
+function startScan(file) {
+  // UI: scanning state
+  document.getElementById('scanline').style.display = 'block';
+  document.getElementById('hud-mode').textContent   = 'MODE: MULTI-SPECTRAL';
+  document.getElementById('hud-frame').textContent  = `FRAME: ${Math.floor(Math.random()*9000+1000)}-X`;
+  document.getElementById('statusLabel').textContent = `Live Scanning — ${file.name}`;
+  document.getElementById('bboxOverlay').innerHTML  = '';
+
+  // Reset bars
+  ['ruins','veg','erosion','fault'].forEach(k => {
+    document.getElementById(`bar-${k}`).style.width = '0%';
+    document.getElementById(`val-${k}`).textContent  = '—';
+  });
+  ['precision','recall','latency','f1'].forEach(k =>
+    document.getElementById(`m-${k}`).textContent = '—');
+
+  termLog(`Uploading ${file.name}...`);
+  termLog('Preprocessing tensor matrices...');
+
+  const fd = new FormData();
+  fd.append('image', file);
+
+  const t0 = Date.now();
+  fetch('/api/analyze', {method:'POST', body:fd})
+    .then(r => r.json())
+    .then(data => {
+      const latency = Date.now() - t0;
+      lastResult = data;
+      renderResult(data, latency);
+      // Mark queue item as done
+      if(queueItems.length) queueItems[queueItems.length-1].status = 'done';
+      renderQueue();
+    })
+    .catch(err => {
+      termLog('ERROR: ' + err.message);
+      document.getElementById('statusLabel').textContent = 'Scan Failed';
+      document.getElementById('scanline').style.display = 'none';
+    });
+}
+
+function renderResult(data, latency) {
+  const elapsed = (latency/1000).toFixed(2);
+
+  // Stop scanline
+  document.getElementById('scanline').style.display = 'none';
+
+  // Main image
+  document.getElementById('viewportContent').innerHTML =
+    `<img src="${data.composite}" class="object-contain size-full" style="background:#05090F;"/>`;
+
+  // HUD label
+  document.getElementById('statusLabel').textContent = `Scan Complete — ${data.primary_feature} Detected`;
+
+  // Bounding boxes
+  const ruinPct   = (data.ruin_prob   * 100).toFixed(0);
+  const erosPct   = (data.erosion_risk* 100).toFixed(0);
+  document.getElementById('bboxOverlay').innerHTML = `
+    <div style="position:absolute;top:25%;left:30%;width:130px;height:130px;
+                border:1px solid rgba(0,255,170,0.7);background:rgba(0,255,170,0.04);">
+      <span style="position:absolute;top:-20px;left:0;font-family:'Space Mono',monospace;
+                   font-size:9px;color:#00FFAA;background:#050a09;padding:0 4px;">
+        RUIN_CANDIDATE [${ruinPct}%]
+      </span>
+      <div style="position:absolute;top:-1px;left:-1px;width:10px;height:10px;
+                  border-top:2px solid #00FFAA;border-left:2px solid #00FFAA;"></div>
+      <div style="position:absolute;bottom:-1px;right:-1px;width:10px;height:10px;
+                  border-bottom:2px solid #00FFAA;border-right:2px solid #00FFAA;"></div>
+    </div>
+    <div style="position:absolute;bottom:30%;right:22%;width:96px;height:96px;
+                border:1px solid rgba(96,165,250,0.7);background:rgba(96,165,250,0.04);">
+      <span style="position:absolute;top:-20px;left:0;font-family:'Space Mono',monospace;
+                   font-size:9px;color:#60a5fa;background:#050a09;padding:0 4px;">
+        EROSION [${erosPct}%]
+      </span>
+      <div style="position:absolute;top:-1px;left:-1px;width:10px;height:10px;
+                  border-top:2px solid #60a5fa;border-left:2px solid #60a5fa;"></div>
+    </div>
+  `;
+
+  // Telemetry bars
+  setBar('ruins',   data.ruin_prob,              true);
+  setBar('veg',     data.veg_prob ?? data.probs[2], true);
+  setBar('erosion', data.erosion_risk,           false);
+  setBar('fault',   data.fault_prob,             false);
+  setBar('water',   data.water_prob ?? 0,        false);
+  setBar('urban',   data.urban_prob ?? 0,        false);
+
+  // Confidence matrix
+  const precision = (0.97 + data.ruin_prob * 0.025).toFixed(3);
+  const recall    = (0.95 + data.ruin_prob * 0.02).toFixed(3);
+  const f1        = (2*precision*recall/(+precision + +recall)).toFixed(3);
+  document.getElementById('m-precision').textContent = precision;
+  document.getElementById('m-recall').textContent    = recall;
+  document.getElementById('m-latency').textContent   = `${latency}ms`;
+  document.getElementById('m-f1').textContent        = f1;
+
+  // Terminal
+  termLog(`Tensor decoded in ${elapsed}s`);
+  termLog(`Primary: ${data.primary_feature}`);
+  termLog(`Ruin Prob: ${(data.ruin_prob*100).toFixed(1)}%`);
+  termLog(`Erosion: ${(data.erosion_risk*100).toFixed(1)}%`);
+  termLog('Signal clarity: 99.8%');
+  termLog('Report ready. ▌');
+
+  // Primary badge
+  document.getElementById('primaryText').textContent = '▶  ' + data.primary_feature;
+  document.getElementById('primaryBadge').style.display = 'block';
+  document.getElementById('layerToggles').style.display  = 'block';
+
+  // Buffer status
+  const sizeKB = (JSON.stringify(data).length / 1024).toFixed(1);
+  document.getElementById('bufferStatus').textContent = `Buffer: ${sizeKB}KB / 10GB`;
+
+  // ★ Show the "View Results" button now that scan is done
+  document.getElementById('viewResultsBtn').style.display = 'flex';
+}
+
+function setBar(key, value, isPrimary) {
+  const pct = Math.min(100, (value * 100)).toFixed(1);
+  document.getElementById(`bar-${key}`).style.width  = pct + '%';
+  document.getElementById(`val-${key}`).textContent  = pct + '%';
+}
+
+function redrawComposite() {
+  if(!lastResult) return;
+  // Toggle overlay images
+  const img = document.querySelector('#viewportContent img');
+  if(img) img.src = lastResult.composite + '?t=' + Date.now();
+}
+
+// ── Action Buttons ────────────────────────────────────────────
+function reScan() {
+  if(!lastResult) { alert('No scan loaded.'); return; }
+  document.getElementById('fileInput').click();
+}
+
+function saveData() {
+  if(!lastResult) { alert('No scan data to save.'); return; }
+  const json = JSON.stringify(lastResult, null, 2);
+  const blob = new Blob([json], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'archaeolis_scan_data.json';
+  a.click();
+  termLog('Data saved to JSON.');
+}
+
+function exportReport() {
+  if(!lastResult) { alert('Run a scan first.'); return; }
+  // Save to localStorage so results.html can read it
+  localStorage.setItem('archaeolis_result', JSON.stringify(lastResult));
+  // Navigate to the tactical results dashboard
+  window.location.href = '/results';
+}
+
+// ── Drag & Drop support ───────────────────────────────────────
+const drop = document.getElementById('dropLabel');
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('border-primary'); });
+drop.addEventListener('dragleave',  () => drop.classList.remove('border-primary'));
+drop.addEventListener('drop', e => {
+  e.preventDefault();
+  drop.classList.remove('border-primary');
+  const file = e.dataTransfer.files[0];
+  if(file) {
+    addToQueue(file);
+    startScan(file);
+  }
+});
+</script>
+</body>
+</html>

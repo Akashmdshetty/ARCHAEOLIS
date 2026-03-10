@@ -107,87 +107,244 @@ class ArchaeologicalAnalyzer:
 
     @torch.no_grad()
     def analyze(self, pil_image: Image.Image) -> dict:
-        """
-        Run full analysis on a PIL image.
-
-        Returns
-        -------
-        dict with keys:
-            ruin_probability    : float [0,1]
-            erosion_risk        : float [0,1]
-            landslide_risk      : float [0,1]
-            fault_probability   : float [0,1]
-            segmentation_overlay: np.ndarray  [H,W,3] uint8  (RGB colorised)
-            erosion_heatmap     : np.ndarray  [H,W,3] uint8  (RGB colourmap)
-            fault_mask          : np.ndarray  [H,W,3] uint8  (RGB colourmap)
-            risk_summary        : str          human-readable summary
-            details             : dict         all raw probabilities
-        """
         orig_size = pil_image.size   # (W, H)
         tensor    = self.transform(pil_image).unsqueeze(0).to(self.device)
 
-        # Encoder → multi-scale features
-        features = self.encoder(tensor)
+        # ── 1. Neural network pass ──────────────────────────────────────────
+        features    = self.encoder(tensor)
+        outputs     = self.heads(features)
+        seg_logits  = outputs['segmentation']
+        erosion_map = outputs['erosion']
+        fault_map   = outputs['faults']
 
-        # Analysis heads
-        outputs = self.heads(features)
+        seg_probs = F.softmax(seg_logits, dim=1)   # [1,3,H,W]
+        total_px  = float(seg_probs.shape[2] * seg_probs.shape[3])
 
-        seg_logits    = outputs['segmentation']   # [1,3,H,W]
-        erosion_map   = outputs['erosion']         # [1,1,H,W]
-        fault_map     = outputs['faults']          # [1,1,H,W]
+        nn_ruin      = float((seg_probs[0,1] > 0.38).float().sum()) / total_px
+        nn_veg       = float((seg_probs[0,2] > 0.28).float().sum()) / total_px
+        nn_ruin_mean = float(seg_probs[0,1].mean())
+        nn_veg_mean  = float(seg_probs[0,2].mean())
+        eros_np      = erosion_map[0,0].cpu().numpy()
+        fault_np     = fault_map[0,0].cpu().numpy()
+        nn_eros      = float((erosion_map[0,0] > 0.30).float().sum()) / total_px
+        nn_fault     = float((fault_map[0,0]   > 0.22).float().sum()) / total_px
 
-        # ── Scalar risk scores  ────────────────────────────────────────────
-        # Instead of raw softmax means, we calculate probabilities based strictly on area/thresholding.
-        # This guarantees the graph perfectly matches what the user sees on the screen!
-        seg_probs = F.softmax(seg_logits, dim=1)         # [1,3,H,W]
-        
-        # Area thresholding from segmentation map
-        ruin_mask = (seg_probs[0, 1] > 0.5).float()      # 1 where Ruins
-        veg_mask  = (seg_probs[0, 2] > 0.5).float()      # 1 where Vegetation
-        
-        total_pixels = float(ruin_mask.numel())
-        ruin_prob = float(ruin_mask.sum()) / total_pixels
-        raw_veg   = float(veg_mask.sum()) / total_pixels
-        raw_bg    = 1.0 - (ruin_prob + raw_veg)          # Background is the remainder
-        
-        # Area thresholding from continuous maps (Erosion & Faults)
-        eros_mask = (erosion_map[0, 0] > 0.4).float()
-        erosion_risk = float(eros_mask.sum()) / total_pixels
-        
-        fault_mask_bin = (fault_map[0, 0] > 0.3).float()
-        fault_prob = float(fault_mask_bin.sum()) / total_pixels
-        
-        # Landslide: weighted composite of the binary maps
-        landslide_risk = float(0.5 * erosion_risk + 0.5 * fault_prob)
-        
-        # (Legacy raw scores kept for internal usage)
-        raw_ruin = ruin_prob
+        # ── 2. Colour-space + channel setup ────────────────────────────────
+        img_np  = np.array(pil_image.convert('RGB'))
+        # Mild denoise before analysis (reduces false detections)
+        img_smooth = cv2.GaussianBlur(img_np, (3, 3), 0)
+        img_bgr = cv2.cvtColor(img_smooth, cv2.COLOR_RGB2BGR)
+        img_hsv = cv2.cvtColor(img_bgr,    cv2.COLOR_BGR2HSV)
+        img_lab = cv2.cvtColor(img_bgr,    cv2.COLOR_BGR2Lab)
 
-        # ── Segmentation overlay image ─────────────────────────────────────
-        seg_class = seg_probs[0].argmax(dim=0).cpu().numpy()       # [H,W]  int
-        seg_rgb   = np.zeros((*seg_class.shape, 3), dtype=np.uint8)
-        for cls_id, colour in self.CATEGORY_COLORS.items():
-            seg_rgb[seg_class == cls_id] = colour
-        # Resize back to original
-        seg_pil  = Image.fromarray(seg_rgb).resize(orig_size, Image.NEAREST)
-        seg_overlay = self._blend_overlay(pil_image, seg_pil, alpha=0.45)
+        h_ch = img_hsv[:,:,0].astype(np.float32)
+        s_ch = img_hsv[:,:,1].astype(np.float32)
+        v_ch = img_hsv[:,:,2].astype(np.float32)
+        r_f  = img_smooth[:,:,0].astype(np.float32)
+        g_f  = img_smooth[:,:,1].astype(np.float32)
+        b_f  = img_smooth[:,:,2].astype(np.float32)
+        a_ch = img_lab[:,:,1].astype(np.float32)  # green(-) / red(+)
+        bstar= img_lab[:,:,2].astype(np.float32)  # blue(-) / yellow(+)
+        gray_u8 = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+        gray_f  = gray_u8.astype(np.float32)
+        total   = float(img_np.shape[0] * img_np.shape[1])
 
-        # ── Erosion heatmap ────────────────────────────────────────────────
-        eros_np = erosion_map[0, 0].cpu().numpy()
-        erosion_heatmap = self._apply_colormap(eros_np, 'hot', orig_size)
+        def morph_clean(mask, k_open=5, k_close=9):
+            m = cv2.morphologyEx(mask.astype(np.uint8),
+                                 cv2.MORPH_OPEN,
+                                 cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k_open, k_open)))
+            m = cv2.morphologyEx(m,
+                                 cv2.MORPH_CLOSE,
+                                 cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k_close, k_close)))
+            return m.astype(bool)
 
-        # ── Fault mask ─────────────────────────────────────────────────────
-        fault_np   = fault_map[0, 0].cpu().numpy()
-        fault_rgb  = self._apply_colormap(fault_np, 'cool', orig_size)
+        def otsu_thresh(arr):
+            """Return Otsu threshold on a float32 array normalised to uint8."""
+            norm = cv2.normalize(arr, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+            thr, _ = cv2.threshold(norm, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            return float(thr) / 255.0 * (arr.max() - arr.min()) + arr.min()
 
-        # ── Human-readable summary ─────────────────────────────────────────
-        summary = self._build_summary(ruin_prob, erosion_risk, landslide_risk, fault_prob)
+        # Shadow mask: very dark pixels are unreliable for any class
+        shadow_mask = v_ch < 30  # HSV Value < 30/255 → shadow
+
+        # ── 3. VEGETATION ──────────────────────────────────────────────────
+        # ExG: Excess Green Index  2G-R-B  (positive = vegetation)
+        rgb_sum = r_f + g_f + b_f + 1e-5
+        r_n, g_n, b_n = r_f/rgb_sum, g_f/rgb_sum, b_f/rgb_sum
+        ExG  = 2*g_n - r_n - b_n          # [-1, 2]  higher = greener
+        ExR  = 1.4*r_n - g_n              # excess red (soil/urban indicator)
+        ExGR = ExG - ExR                  # combined index: vegetation vs soil
+
+        # CIVE (Colour Index of Vegetation Extraction)
+        CIVE = 0.441*r_f - 0.811*g_f + 0.385*b_f + 18.78745
+
+        # Lab a* channel: negative a* = green, positive = red
+        veg_lab = a_ch < 128 - 8   # below neutral (128) = greenish
+
+        # Thresholds via Otsu for ExGR
+        exgr_thr = max(0.02, otsu_thresh(ExGR))
+        veg_exgr  = ExGR > exgr_thr
+        veg_cive  = CIVE < 0              # negative CIVE = vegetation
+        veg_hsv   = (h_ch >= 30) & (h_ch <= 90) & (s_ch > 35) & (v_ch > 35)
+
+        # Combine: majority vote across 4 independent signals
+        veg_votes = veg_exgr.astype(np.uint8) + veg_cive.astype(np.uint8) + \
+                    veg_lab.astype(np.uint8)   + veg_hsv.astype(np.uint8)
+        veg_mask  = morph_clean(veg_votes >= 2, k_open=7, k_close=11)
+        veg_mask  = veg_mask & ~shadow_mask
+        cv_veg    = float(veg_mask.sum()) / total
+
+        # ── 4. RUINS / STRUCTURES ──────────────────────────────────────────
+        # Local Standard Deviation (texture richness)
+        mean_f   = cv2.blur(gray_f, (9, 9))
+        sq_mean  = cv2.blur(gray_f**2, (9, 9))
+        local_sd = np.sqrt(np.clip(sq_mean - mean_f**2, 0, None))
+
+        # Laplacian for sharpness (structured surfaces are sharp)
+        lap = np.abs(cv2.Laplacian(gray_u8, cv2.CV_32F))
+        lap_blur = cv2.blur(lap, (11, 11))
+
+        # Edge density (Canny multi-threshold combined)
+        edges1 = cv2.Canny(gray_u8, 20, 60)
+        edges2 = cv2.Canny(gray_u8, 50, 150)
+        edge_map = ((edges1.astype(np.uint8) | edges2.astype(np.uint8))
+                       .astype(np.float32))
+        edge_dens = cv2.blur(edge_map, (19, 19))
+
+        # Material colour: stone/concrete/masonry
+        stone_color  = (s_ch < 60) & (v_ch >= 55) & (v_ch < 215)          # gray/beige
+        sandstone    = (h_ch >= 8) & (h_ch <=  30) & (s_ch < 90) & (v_ch >= 70)
+        concrete_col = (s_ch < 25) & (v_ch >= 140)
+
+        # Require material colour AND (high texture OR high edge density)
+        sd_thr   = max(5.0, otsu_thresh(local_sd) * 0.6)
+        edge_thr = max(0.04, otsu_thresh(edge_dens) * 0.6)
+        struct   = (stone_color | sandstone | concrete_col) & \
+                   ((local_sd > sd_thr) | (edge_dens > edge_thr) | (lap_blur > 8))
+        struct_mask = morph_clean(struct, k_open=3, k_close=7)
+        struct_mask = struct_mask & ~veg_mask & ~shadow_mask
+        cv_ruin     = float(struct_mask.sum()) / total
+
+        # ── 5. EROSION / BARE EARTH ────────────────────────────────────────
+        # BSI alone mis-classifies gray concrete (roads) as bare earth.
+        # Fix: require BOTH positive BSI AND a warm earthy hue (H=5-30)
+        # so neutral grays are excluded entirely.
+        BSI = (r_f + b_f - g_f) / (r_f + b_f + g_f + 1e-5)
+
+        # Strict warm-hued soil colours: brown, red-brown, tan, orange
+        warm_hue    = (h_ch >= 4) & (h_ch <= 30) & (s_ch > 18)   # warm tint
+        sandy_warm  = (s_ch < 60) & (v_ch > 100) & (r_f > b_f + 8)   # warm pale sand
+        # Positive BSI AND warm hue = actual bare earth, not road/concrete
+        bsi_pos     = BSI > 0.04
+        bare_mask   = morph_clean(
+            (bsi_pos & warm_hue) | (warm_hue & (v_ch > 40)) | sandy_warm,
+            k_open=5, k_close=9)
+        bare_mask   = bare_mask & ~veg_mask & ~shadow_mask & ~struct_mask
+        cv_eros     = float(bare_mask.sum()) / total
+
+        # ── 6. WATER BODIES ────────────────────────────────────────────────
+        # NDWI proxy: strongly negative = water
+        NDWI_proxy = (g_f - b_f) / (g_f + b_f + 1e-5)
+        # Hue: strict blue/cyan (H 92-130), HIGH saturation (>60)
+        water_hsv  = (h_ch >= 92) & (h_ch <= 130) & (s_ch > 60) & (v_ch > 25) & (v_ch < 200)
+        # Dark areas with STRONGLY blue-dominant channel
+        water_dark = (b_f > r_f + 25) & (b_f > g_f + 15) & (v_ch < 100)
+        # Lab b* well below neutral (128); <105 is clearly blue
+        water_lab  = (bstar < 105) & (s_ch > 30) & (v_ch < 160)
+
+        # Require 3 of 4 signals (strict majority) to mark as water
+        water_votes = (NDWI_proxy < -0.12).astype(np.uint8) + \
+                      water_hsv.astype(np.uint8) + \
+                      water_dark.astype(np.uint8) + \
+                      water_lab.astype(np.uint8)
+        water_mask  = morph_clean(water_votes >= 3, k_open=7, k_close=13)
+        water_mask  = water_mask & ~veg_mask & ~bare_mask & ~struct_mask
+        cv_water    = float(water_mask.sum()) / total
+
+        # ── 7. URBAN / BUILT-UP AREA ───────────────────────────────────────
+        # Roads/buildings: low saturation + high edge density + not classified elsewhere
+        urban_col    = (s_ch < 40) & (v_ch >= 70) & (v_ch <= 230)
+        urban_struct_raw = morph_clean(
+            urban_col & (edge_dens > max(0.05, edge_thr * 0.8)),
+            k_open=3, k_close=5)
+        urban_struct_raw = urban_struct_raw & ~struct_mask & ~veg_mask & ~water_mask
+        cv_urban     = float(urban_struct_raw.sum()) / total
+
+        # ── 8. FAULT / LINEAR FEATURES ─────────────────────────────────────
+        # Probabilistic Hough Line Transform → count lines per area
+        canny_fault = cv2.Canny(gray_u8, 40, 120, apertureSize=3)
+        lines = cv2.HoughLinesP(canny_fault, rho=1, theta=np.pi/180,
+                                 threshold=40, minLineLength=30, maxLineGap=10)
+        fault_line_img = np.zeros_like(gray_u8, dtype=np.float32)
+        if lines is not None:
+            for ln in lines:
+                x1,y1,x2,y2 = ln[0]
+                cv2.line(fault_line_img, (x1,y1), (x2,y2), 1.0, 2)
+        # Also use gradient magnitude for continuous fault map
+        sobelx = cv2.Sobel(gray_u8, cv2.CV_32F, 1, 0, ksize=5)
+        sobely = cv2.Sobel(gray_u8, cv2.CV_32F, 0, 1, ksize=5)
+        grad_mag  = np.sqrt(sobelx**2 + sobely**2)
+        grad_norm = grad_mag / (grad_mag.max() + 1e-6)
+        # Hough density + gradient give complementary signals
+        fault_cv_f = np.clip(0.6 * fault_line_img +
+                              0.4 * (grad_norm > 0.25).astype(np.float32), 0, 1)
+        fault_cv_f = cv2.blur(fault_cv_f, (5, 5))
+        cv_fault   = float(fault_cv_f.mean()) * 0.8
+
+        # ── 9. Blend NN + CV with calibrated weights ────────────────────────
+        nn_w, cv_w = 0.30, 0.70
+
+        ruin_probability = min(1.0, nn_w * max(nn_ruin, nn_ruin_mean*3.0) + cv_w * cv_ruin)
+        raw_veg          = min(1.0, nn_w * max(nn_veg,  nn_veg_mean*3.0)  + cv_w * cv_veg)
+        erosion_risk     = min(1.0, nn_w * nn_eros  + cv_w * cv_eros)
+        fault_prob       = min(1.0, nn_w * nn_fault + cv_w * cv_fault)
+        water_prob       = min(1.0, cv_water * 1.1)
+        urban_prob       = min(1.0, cv_urban * 0.75)
+        landslide_risk   = min(1.0, 0.40 * erosion_risk + 0.35 * fault_prob
+                               + 0.15 * water_prob + 0.10 * ruin_probability)
+        raw_bg           = max(0.0, 1.0 - ruin_probability - raw_veg
+                               - water_prob - urban_prob - erosion_risk * 0.5)
+
+        # ── 10. Build rich 6-class composite overlay ────────────────────────
+        W, H = orig_size
+        def rs(mask):
+            return cv2.resize(mask.astype(np.uint8), (W, H),
+                              interpolation=cv2.INTER_NEAREST).astype(bool)
+
+        seg_rgb = np.zeros((H, W, 3), dtype=np.uint8)
+        seg_rgb[:]                 = (15,  15,  40)   # deep background
+        seg_rgb[rs(bare_mask)]     = (160, 100,  40)  # warm brown — bare/erosion
+        seg_rgb[rs(urban_struct_raw)]=(190,190, 195)  # silver    — urban/roads
+        seg_rgb[rs(water_mask)]    = ( 20,  90, 210)  # deep blue — water
+        seg_rgb[rs(struct_mask)]   = (210,  45,  45)  # bright red — ruins
+        seg_rgb[rs(veg_mask)]      = ( 30, 190,  55)  # bright green — vegetation
+
+        seg_overlay = self._blend_overlay(pil_image, Image.fromarray(seg_rgb), alpha=0.48)
+
+        # ── 11. Erosion heatmap ─────────────────────────────────────────────
+        bare_f    = cv2.resize(bare_mask.astype(np.float32), (W, H))
+        BSI_f     = cv2.resize(cv2.normalize(BSI, None, 0, 1, cv2.NORM_MINMAX), (W, H))
+        eros_nn_f = cv2.resize(eros_np, (W, H))
+        eros_comb = np.clip(0.45*bare_f + 0.30*BSI_f + 0.25*eros_nn_f, 0, 1)
+        erosion_heatmap = self._apply_colormap(eros_comb, 'YlOrRd', orig_size)
+
+        # ── 12. Fault map ───────────────────────────────────────────────────
+        fault_cv_rs = cv2.resize(fault_cv_f, (W, H))
+        fault_nn_rs = cv2.resize(fault_np,   (W, H))
+        fault_comb  = np.clip(0.55*fault_cv_rs + 0.45*fault_nn_rs, 0, 1)
+        fault_rgb   = self._apply_colormap(fault_comb, 'PuRd', orig_size)
+
+        # ── 13. Summary ─────────────────────────────────────────────────────
+        summary = self._build_summary(ruin_probability, erosion_risk, landslide_risk,
+                                      fault_prob, raw_veg, water_prob, urban_prob)
 
         return {
-            "ruin_probability":     ruin_prob,
+            "ruin_probability":     ruin_probability,
             "erosion_risk":         erosion_risk,
             "landslide_risk":       landslide_risk,
             "fault_probability":    fault_prob,
+            "water_probability":    water_prob,
+            "urban_probability":    urban_prob,
             "segmentation_overlay": seg_overlay,
             "erosion_heatmap":      erosion_heatmap,
             "fault_mask":           fault_rgb,
@@ -195,14 +352,18 @@ class ArchaeologicalAnalyzer:
             "details": {
                 "seg_class_probs": {
                     "Background":  raw_bg,
-                    "Ruins/Walls": raw_ruin,
+                    "Ruins/Walls": ruin_probability,
                     "Vegetation":  raw_veg,
+                    "Water":       water_prob,
+                    "Urban":       urban_prob,
                 },
-                "erosion_risk":    erosion_risk,
-                "landslide_risk":  landslide_risk,
-                "fault_lines":     fault_prob,
+                "erosion_risk":   erosion_risk,
+                "landslide_risk": landslide_risk,
+                "fault_lines":    fault_prob,
             }
         }
+
+
 
     # ── Internal helpers ───────────────────────────────────────────────────
     @staticmethod
@@ -226,8 +387,9 @@ class ArchaeologicalAnalyzer:
         return np.array(pil_cm)
 
     @staticmethod
-    def _build_summary(ruin: float, erosion: float, landslide: float, fault: float) -> str:
-        lines = ["🗺️  Archaeological & Hazard Analysis Report", "─" * 45]
+    def _build_summary(ruin: float, erosion: float, landslide: float, fault: float,
+                       veg: float = 0.0, water: float = 0.0, urban: float = 0.0) -> str:
+        lines = ["🗺️  Archaeological & Hazard Analysis Report", "─" * 48]
 
         # Archaeological
         ruin_pct = ruin * 100
@@ -239,6 +401,15 @@ class ArchaeologicalAnalyzer:
             lines.append("    → Potential ruins or buried structures detected.")
         else:
             lines.append(f"🏛️  LOW archaeological feature probability ({ruin_pct:.1f}%)")
+
+        # Vegetation
+        veg_pct = veg * 100
+        if veg_pct > 50:
+            lines.append(f"🌿  HIGH vegetation cover ({veg_pct:.1f}%) — dense green canopy detected.")
+        elif veg_pct > 20:
+            lines.append(f"🌿  MODERATE vegetation cover ({veg_pct:.1f}%).")
+        else:
+            lines.append(f"🌿  SPARSE vegetation ({veg_pct:.1f}%) — mostly bare or built-up terrain.")
 
         # Erosion
         eros_pct = erosion * 100
@@ -266,6 +437,16 @@ class ArchaeologicalAnalyzer:
             lines.append(f"⚡  MINOR fault lines possible ({fault_pct:.1f}%).")
         else:
             lines.append(f"⚡  No major land faults detected ({fault_pct:.1f}%).")
+
+        # Water
+        water_pct = water * 100
+        if water_pct > 10:
+            lines.append(f"💧  Water bodies detected — coverage {water_pct:.1f}%.")
+
+        # Urban
+        urban_pct = urban * 100
+        if urban_pct > 10:
+            lines.append(f"🏙️  Urban/built-up surfaces detected ({urban_pct:.1f}%) — roads or structures present.")
 
         return "\n".join(lines)
 

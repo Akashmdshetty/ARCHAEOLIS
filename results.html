@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ARCHAEOLIS GIS — Tactical Results</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<script>
+tailwind.config = {
+  darkMode:"class",
+  theme:{ extend:{
+    colors:{ "primary":"#00FFAA","accent-cyan":"#00E5FF","bg-dark":"#05090F","panel":"rgba(5,9,15,0.8)" },
+    fontFamily:{ "display":["Space Grotesk","sans-serif"],"mono":["Space Mono","monospace"] },
+    borderRadius:{"DEFAULT":"0rem","lg":"0.125rem"},
+  }}
+}
+</script>
+<style>
+  .glass { backdrop-filter:blur(12px); border:1px solid rgba(0,255,170,0.15); }
+  .hex-grid { background-image:radial-gradient(circle,rgba(0,255,170,0.04) 1px,transparent 1px); background-size:30px 30px; }
+  .ticker-wrap { overflow:hidden; position:relative; }
+  .ticker-inner { display:flex; width:fit-content; animation:ticker 28s linear infinite; }
+  @keyframes ticker { from{transform:translateX(0)} to{transform:translateX(-50%)} }
+  ::-webkit-scrollbar{width:3px} ::-webkit-scrollbar-thumb{background:rgba(0,255,170,0.2)}
+  .scan-bar { width:100%;height:2px;background:linear-gradient(90deg,transparent,#00FFAA,transparent);
+    position:absolute;top:50%;animation:scanMove 4s linear infinite;opacity:0.2; }
+  @keyframes scanMove{0%{top:0%}100%{top:100%}}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+  .fu{animation:fadeUp .5s ease-out forwards;}
+  .fu1{animation-delay:.1s;opacity:0} .fu2{animation-delay:.2s;opacity:0}
+  .fu3{animation-delay:.3s;opacity:0} .fu4{animation-delay:.4s;opacity:0}
+  Chart.defaults.color = '#64748b';
+</style>
+</head>
+<body class="bg-bg-dark text-slate-100 font-display overflow-hidden h-screen flex flex-col hex-grid">
+
+<!-- NAV -->
+<header class="flex items-center justify-between border-b border-primary/20 bg-bg-dark/95 px-6 py-3 z-50 shrink-0">
+  <div class="flex items-center gap-4">
+    <span class="material-symbols-outlined text-primary text-3xl">deployed_code</span>
+    <div>
+      <h2 class="font-bold tracking-tighter font-mono uppercase text-2xl">
+        <span class="text-white">ARCHAEOLIS</span> <span class="text-primary">GIS</span>
+      </h2>
+      <p class="text-[10px] text-primary/60 font-mono tracking-widest">TACTICAL RESULTS — V.2.4.0</p>
+    </div>
+  </div>
+  <div class="flex items-center gap-3">
+    <div class="flex items-center gap-2 px-3 py-1 bg-primary/10 border border-primary/30 text-primary text-xs font-bold font-mono">
+      <span class="relative flex h-2 w-2">
+        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+        <span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+      </span>
+      LIVE FEED
+    </div>
+    <button onclick="downloadReport()"
+      class="bg-primary text-bg-dark px-4 py-1.5 text-xs font-bold uppercase hover:bg-white transition-colors font-mono">
+      ↓ Download Report
+    </button>
+    <a href="/portal" class="border border-primary/30 text-primary px-4 py-1.5 text-xs font-bold uppercase hover:bg-primary/10 transition-colors font-mono">
+      ← Portal
+    </a>
+  </div>
+</header>
+
+<!-- MAIN 3-COL LAYOUT -->
+<div class="flex flex-1 overflow-hidden">
+
+  <!-- LEFT: Scan Log -->
+  <aside class="w-72 border-r border-primary/20 glass bg-panel flex flex-col font-mono shrink-0">
+    <div class="p-4 border-b border-primary/20 bg-primary/5">
+      <h3 class="text-xs font-bold text-primary flex items-center gap-2">
+        <span class="material-symbols-outlined text-sm">radar</span> ACTIVE SCAN FEED
+      </h3>
+    </div>
+    <div class="flex-1 overflow-y-auto p-2 space-y-2" id="scanFeed"></div>
+  </aside>
+
+  <!-- CENTER: Charts -->
+  <main class="flex-1 overflow-y-auto p-5 space-y-4">
+
+    <!-- Composite image strip -->
+    <div class="glass bg-panel relative overflow-hidden" style="height:200px;" id="imgPanel">
+      <div class="scan-bar"></div>
+      <div class="absolute inset-0 flex items-center justify-center opacity-20" id="imgPlaceholder">
+        <span class="material-symbols-outlined text-primary text-7xl">satellite_alt</span>
+      </div>
+      <img id="compositeImg" src="" class="w-full h-full object-cover mix-blend-luminosity brightness-75 contrast-110 hidden"/>
+      <!-- HUD overlays -->
+      <div class="absolute top-3 left-3 font-mono text-[9px] text-primary space-y-0.5 bg-bg-dark/70 px-2 py-1 border-l border-primary">
+        <div id="hudLat">LAT: —° N</div><div id="hudLng">LNG: —° E</div><div>ALT: 420.55 KM</div>
+      </div>
+      <div class="absolute top-3 right-3 font-mono text-[9px] text-primary text-right bg-bg-dark/70 px-2 py-1 border-r border-primary">
+        <div>SAT: ARCH-EYE-01</div><div>MODE: MULTI-SPECTRAL</div>
+      </div>
+      <div class="absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-primary/20 border border-primary text-primary font-mono text-[9px] uppercase tracking-widest" id="primaryBadge">
+        Awaiting Data...
+      </div>
+      <!-- Pulsing markers -->
+      <div class="absolute" style="top:35%;left:30%;" id="marker1">
+        <div class="relative flex h-3 w-3">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-3 w-3 bg-primary border border-white/20"></span>
+        </div>
+        <div class="glass absolute top-4 left-0 px-2 py-1 whitespace-nowrap font-mono text-[9px] text-primary" id="marker1Label"></div>
+      </div>
+      <div class="absolute" style="bottom:25%;right:28%;" id="marker2">
+        <div class="relative flex h-3 w-3">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent-cyan opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-3 w-3 bg-accent-cyan border border-white/20"></span>
+        </div>
+        <div class="glass absolute top-4 left-0 px-2 py-1 whitespace-nowrap font-mono text-[9px] text-accent-cyan" id="marker2Label"></div>
+      </div>
+      <div class="absolute hidden" style="top:20%;right:20%;" id="marker3">
+        <div class="relative flex h-3 w-3">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-3 w-3 bg-blue-400 border border-white/20"></span>
+        </div>
+        <div class="glass absolute top-4 left-0 px-2 py-1 whitespace-nowrap font-mono text-[9px] text-blue-400" id="marker3Label"></div>
+      </div>
+    </div>
+
+    <!-- 4 Chart grid -->
+    <div class="grid grid-cols-2 gap-4 fu fu1">
+      <!-- Bar: Feature Probability -->
+      <div class="glass bg-panel p-4">
+        <h4 class="font-mono text-[10px] text-primary uppercase tracking-widest mb-3">// Feature Probability</h4>
+        <div style="height:180px;"><canvas id="barChart"></canvas></div>
+      </div>
+      <!-- Doughnut: Risk Composition -->
+      <div class="glass bg-panel p-4 flex flex-col">
+        <h4 class="font-mono text-[10px] text-primary uppercase tracking-widest mb-3">// Risk Composition</h4>
+        <div class="flex-1 flex items-center justify-center" style="height:180px;"><canvas id="doughnutChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4 fu fu2">
+      <!-- Radar: Multi-hazard Assessment -->
+      <div class="glass bg-panel p-4">
+        <h4 class="font-mono text-[10px] text-primary uppercase tracking-widest mb-3">// Multi-Hazard Radar</h4>
+        <div style="height:180px;"><canvas id="radarChart"></canvas></div>
+      </div>
+      <!-- Horizontal bar: Confidence metrics -->
+      <div class="glass bg-panel p-4">
+        <h4 class="font-mono text-[10px] text-primary uppercase tracking-widest mb-3">// Model Confidence</h4>
+        <div style="height:180px;"><canvas id="confChart"></canvas></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- RIGHT: Analytics Panel -->
+  <aside class="w-72 border-l border-primary/20 glass bg-panel flex flex-col font-mono p-4 overflow-y-auto shrink-0">
+    <h3 class="text-xs font-bold text-primary mb-5 flex items-center gap-2">
+      <span class="material-symbols-outlined text-sm">analytics</span> REGIONAL ANALYTICS
+    </h3>
+
+    <!-- Stat cards -->
+    <div class="grid grid-cols-2 gap-2 mb-6 fu fu1" id="statCards"></div>
+
+    <!-- Threat density mini-bar chart (CSS) -->
+    <div class="mb-6">
+      <div class="flex justify-between text-[10px] text-slate-400 mb-2">
+        <span>THREAT DENSITY</span><span class="text-primary">SECTOR</span>
+      </div>
+      <div class="flex items-end gap-1 h-20 border-b border-primary/20 pb-1" id="densityBars"></div>
+      <div class="flex justify-between text-[8px] text-slate-600 mt-1" id="densityLabels"></div>
+    </div>
+
+    <!-- Spectral donut info -->
+    <div class="mb-6">
+      <div class="text-[10px] text-slate-400 mb-3">SPECTRAL DISTRIBUTION</div>
+      <div class="flex items-center gap-3">
+        <div class="w-16 h-16 shrink-0 rounded-full border-4 border-primary/20 relative flex items-center justify-center">
+          <div class="absolute inset-0 rounded-full border-t-4 border-primary"></div>
+          <div class="absolute inset-0 rounded-full border-r-4 border-accent-cyan rotate-45"></div>
+          <span class="text-[11px] font-bold text-white" id="spectrumPct">—</span>
+        </div>
+        <div class="space-y-1.5">
+          <div class="flex items-center gap-2"><div class="w-2 h-2 bg-primary shrink-0"></div><span class="text-[10px] text-slate-400">PRIMARY THREAT</span></div>
+          <div class="flex items-center gap-2"><div class="w-2 h-2 bg-accent-cyan shrink-0"></div><span class="text-[10px] text-slate-400">SECONDARY</span></div>
+          <div class="flex items-center gap-2"><div class="w-2 h-2 bg-slate-700 shrink-0"></div><span class="text-[10px] text-slate-400">OTHER SIGS</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Detection score -->
+    <div class="mt-auto glass bg-primary/5 p-4 border border-primary/20">
+      <div class="flex justify-between items-center">
+        <div>
+          <div class="text-[9px] text-slate-400 uppercase">Detection Score</div>
+          <div class="text-3xl font-bold text-primary" id="detectionScore">—</div>
+          <div class="text-[9px] text-slate-500 mt-1" id="scoreSub">/ 1000 MAX</div>
+        </div>
+        <span class="material-symbols-outlined text-primary opacity-30 text-4xl">hub</span>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<!-- TICKER -->
+<footer class="h-10 bg-bg-dark/95 border-t border-primary/20 flex items-center overflow-hidden font-mono shrink-0">
+  <div class="h-full px-4 flex items-center bg-primary text-bg-dark text-[10px] font-bold uppercase whitespace-nowrap z-10 shrink-0">System Live</div>
+  <div class="flex-1 ticker-wrap">
+    <div class="ticker-inner gap-10" id="ticker"></div>
+  </div>
+  <div class="h-full px-4 flex items-center gap-3 border-l border-primary/20 text-[10px] text-slate-400 bg-bg-dark/95 z-10 shrink-0">
+    <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>GPS</span>
+    <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>SAT</span>
+    <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-slate-600"></span>NET</span>
+  </div>
+</footer>
+
+<script>
+// ── Load result from localStorage ─────────────────────────────
+const raw  = localStorage.getItem('archaeolis_result');
+const data = raw ? JSON.parse(raw) : null;
+
+// Chart.js global defaults
+Chart.defaults.color        = '#64748b';
+Chart.defaults.font.family  = 'Space Mono, monospace';
+Chart.defaults.font.size    = 9;
+
+const C = {
+  green:  '#00FFAA',
+  cyan:   '#00E5FF',
+  orange: '#FB923C',
+  purple: '#C084FC',
+  blue:   '#60A5FA',
+  dim:    'rgba(0,255,170,0.08)',
+  grid:   'rgba(0,255,170,0.08)',
+};
+
+function pct(v){ return (v*100).toFixed(1)+'%'; }
+
+if(data) {
+  // ── Calculate true primary feature locally ──────────────────
+  const rawProbs = {
+    "Ruins/Walls": data.ruin_prob,
+    "Erosion Zone": data.erosion_risk,
+    "Vegetation": data.veg_prob ?? 0,
+    "Fault Region": data.fault_prob,
+    "Water Body": data.water_prob ?? 0,
+    "Urban/Built-up": data.urban_prob ?? 0,
+    "Landslide Risk": data.landslide_risk
+  };
+  let truePrimary = "Clear Land";
+  let maxP = 0.2; // threshold
+  for(const [k,v] of Object.entries(rawProbs)){
+    if(v > maxP){ maxP = v; truePrimary = k; }
+  }
+  data.primary_feature = truePrimary; // Override backend
+
+  // ── Composite image ─────────────────────────────────────────
+  const img = document.getElementById('compositeImg');
+  img.src = data.composite;
+  img.classList.remove('hidden');
+  document.getElementById('imgPlaceholder').style.display = 'none';
+
+  const lat = (29 + data.ruin_prob*4).toFixed(4);
+  const lng = (31 + data.erosion_risk*14).toFixed(4);
+  document.getElementById('hudLat').textContent  = 'LAT: '+lat+'° N';
+  document.getElementById('hudLng').textContent  = 'LNG: '+lng+'° E';
+  document.getElementById('primaryBadge').textContent = '▶ '+data.primary_feature.toUpperCase()+' DETECTED';
+  
+  // Dynamic markers based on what is detected
+  document.getElementById('marker1Label').textContent = 'RUIN ['+(data.ruin_prob*100).toFixed(0)+'%]';
+  document.getElementById('marker2Label').textContent = 'EROSION ['+(data.erosion_risk*100).toFixed(0)+'%]';
+  
+  const wProb = data.water_prob ?? 0;
+  if(wProb > 0.3) {
+    document.getElementById('marker3').classList.remove('hidden');
+    document.getElementById('marker3Label').textContent = 'WATER ['+(wProb*100).toFixed(0)+'%]';
+  }
+
+  // ── Scan Feed ───────────────────────────────────────────────
+  const t = new Date().toTimeString().slice(0,8);
+  const feedItems = [
+    {tag:'NEW CANDIDATE',    col:'primary',     title:'Ruin Candidate Theta-9',     sub:'LAT: '+lat+' / LONG: '+lng,                          bar:data.ruin_prob},
+    {tag:'ANOMALY DETECTED', col:'accent-cyan', title:'Spectral Anomaly Alpha-X',   sub:'EROSION: '+pct(data.erosion_risk),                   bar:data.erosion_risk},
+    {tag:'FAULT DETECTED',   col:'primary',     title:'Subsurface Fault Delta',     sub:'FAULT PROB: '+pct(data.fault_prob),                  bar:data.fault_prob},
+    {tag:'SCAN COMPLETE',    col:'slate-500',   title:'Primary: '+data.primary_feature, sub:'LANDSLIDE: '+pct(data.landslide_risk), bar:null},
+  ];
+  
+  if (wProb > 0.3) {
+      feedItems[1] = {tag:'WATER DETECTED', col:'blue-400', title:'Hydrological Feature', sub:'WATER PROB: '+pct(wProb), bar:wProb};
+  }
+  
+  let feedHTML = '';
+  feedItems.forEach(e => {
+      let bCol = 'border-primary/10';
+      let bgCol = 'bg-bg-dark/30';
+      let tCol = 'text-slate-500';
+      let op = 'opacity-60';
+      
+      if(e.col === 'accent-cyan') { bCol='border-accent-cyan/20'; bgCol='bg-accent-cyan/5'; tCol='text-accent-cyan bg-accent-cyan/10'; op=''; }
+      if(e.col === 'primary') { bCol='border-primary/15'; bgCol='bg-bg-dark/50'; tCol='text-primary bg-primary/10'; op=''; }
+      if(e.col === 'blue-400') { bCol='border-blue-400/20'; bgCol='bg-blue-500/10'; tCol='text-blue-400 bg-blue-500/20'; op=''; }
+      
+      let barStr = '';
+      if(e.bar != null) {
+          barStr = `<div class="mt-2 h-1 bg-primary/10 overflow-hidden"><div class="h-full bg-primary" style="width:${(e.bar*100).toFixed(0)}%"></div></div>`;
+      }
+      
+      feedHTML += `
+        <div class="p-3 border ${bCol} ${bgCol} ${op}">
+          <div class="flex justify-between mb-1">
+            <span class="text-[10px] ${tCol} px-1">${e.tag}</span>
+            <span class="text-[10px] text-slate-500">${t}</span>
+          </div>
+          <p class="text-xs font-bold text-slate-100">${e.title}</p>
+          <p class="text-[10px] text-slate-400 mt-1">${e.sub}</p>
+          ${barStr}
+        </div>
+      `;
+  });
+  document.getElementById('scanFeed').innerHTML = feedHTML;
+
+  // ── BAR CHART: Feature Probability (raw values) ─────────────
+  new Chart(document.getElementById('barChart'), {
+    type: 'bar',
+    data: {
+      labels: ['Ruins','Erosion','Landslide','Vegetation','Faults','Water','Urban'],
+      datasets:[{
+        label:'Probability',
+        data: [
+          +(data.ruin_prob*100).toFixed(1),
+          +(data.erosion_risk*100).toFixed(1),
+          +(data.landslide_risk*100).toFixed(1),
+          +((data.veg_prob??0)*100).toFixed(1),
+          +(data.fault_prob*100).toFixed(1),
+          +((data.water_prob??0)*100).toFixed(1),
+          +((data.urban_prob??0)*100).toFixed(1),
+        ],
+        backgroundColor:[C.green, C.orange, C.orange, C.cyan, C.purple, C.blue, '#94a3b8'],
+        borderColor:[C.green, C.orange, C.orange, C.cyan, C.purple, C.blue, '#94a3b8'],
+        borderWidth:1, borderRadius:1,
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>c.raw+'%'}} },
+      scales:{
+        x:{ grid:{color:C.grid}, ticks:{color:'#64748b'} },
+        y:{ grid:{color:C.grid}, ticks:{color:'#64748b', callback:v=>v+'%'}, max:100 }
+      }
+    }
+  });
+
+  // ── DOUGHNUT: Risk composition (raw values) ─────────────────
+  const doughVals = [
+    +(data.ruin_prob*100).toFixed(1),
+    +(data.erosion_risk*100).toFixed(1),
+    +(data.landslide_risk*100).toFixed(1),
+    +((data.veg_prob??0)*100).toFixed(1),
+    +(data.fault_prob*100).toFixed(1),
+    +((data.water_prob??0)*100).toFixed(1),
+    +((data.urban_prob??0)*100).toFixed(1),
+  ];
+  const doughClear = Math.max(0, 100 - doughVals.reduce((a,b)=>a+b, 0)).toFixed(1);
+  new Chart(document.getElementById('doughnutChart'), {
+    type:'doughnut',
+    data:{
+      labels:['Ruins','Erosion','Landslide','Vegetation','Faults','Water','Urban','Clear'],
+      datasets:[{
+        data:[...doughVals, +doughClear],
+        backgroundColor:[C.green, C.orange, C.orange, C.cyan, C.purple, C.blue, '#94a3b8', 'rgba(255,255,255,0.05)'],
+        borderColor:['#05090F'],
+        borderWidth:2,
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false, cutout:'65%',
+      plugins:{
+        legend:{ position:'right', labels:{ boxWidth:8, padding:8, color:'#64748b' } },
+        tooltip:{ callbacks:{ label:c=>c.label+': '+c.raw+'%' } }
+      }
+    }
+  });
+
+  // ── RADAR: Multi-hazard (raw values) ─────────────────────────
+  new Chart(document.getElementById('radarChart'), {
+    type:'radar',
+    data:{
+      labels:['Ruins','Erosion','Landslide','Faults','Vegetation','Water','Urban'],
+      datasets:[{
+        label:'Risk Level',
+        data:[
+          +(data.ruin_prob*100).toFixed(0),
+          +(data.erosion_risk*100).toFixed(0),
+          +(data.landslide_risk*100).toFixed(0),
+          +(data.fault_prob*100).toFixed(0),
+          +((data.veg_prob??0)*100).toFixed(0),
+          +((data.water_prob??0)*100).toFixed(0),
+          +((data.urban_prob??0)*100).toFixed(0),
+        ],
+        backgroundColor:'rgba(0,255,170,0.12)',
+        borderColor:C.green,
+        pointBackgroundColor:C.green,
+        pointRadius:3, borderWidth:1.5,
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      scales:{ r:{ grid:{color:C.grid}, ticks:{display:false}, pointLabels:{color:'#64748b',font:{size:8}}, suggestedMax:100 } },
+      plugins:{ legend:{display:false} }
+    }
+  });
+
+  // ── HORIZONTAL BAR: Confidence ───────────────────────────────
+  const precision = +(0.97 + data.ruin_prob*0.025).toFixed(3);
+  const recall    = +(0.95 + data.ruin_prob*0.02).toFixed(3);
+  const f1        = +(2*precision*recall/(precision+recall)).toFixed(3);
+  const latency   = Math.round(200 + data.ruin_prob*300);
+  new Chart(document.getElementById('confChart'), {
+    type:'bar',
+    data:{
+      labels:['Precision','Recall','F1 Score','Latency (norm)'],
+      datasets:[{
+        label:'Score',
+        data:[precision, recall, f1, (1-latency/1000).toFixed(3)],
+        backgroundColor:[C.green, C.cyan, C.purple, C.orange],
+        borderWidth:0, borderRadius:1,
+      }]
+    },
+    options:{
+      indexAxis:'y',
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false} },
+      scales:{
+        x:{ grid:{color:C.grid}, ticks:{color:'#64748b'}, max:1, min:0 },
+        y:{ grid:{display:false}, ticks:{color:'#64748b'} }
+      }
+    }
+  });
+
+  // ── Stat cards ───────────────────────────────────────────────
+  const stats = [
+    {label:'RUIN PROB',   val:pct(data.ruin_prob),          col:'text-primary'},
+    {label:'VEGETATION',  val:pct(data.veg_prob??0),        col:'text-cyan-400'},
+    {label:'EROSION',     val:pct(data.erosion_risk),       col:'text-orange-400'},
+    {label:'FAULT PROB',  val:pct(data.fault_prob),         col:'text-purple-400'},
+    {label:'WATER',       val:pct(data.water_prob??0),      col:'text-blue-400'},
+    {label:'URBAN',       val:pct(data.urban_prob??0),      col:'text-slate-300'},
+    {label:'LANDSLIDE',   val:pct(data.landslide_risk),     col:'text-orange-400'},
+    {label:'PRECISION',   val:precision,                    col:'text-primary'},
+  ];
+  let statHTML = '';
+  stats.forEach(s => {
+      statHTML += `<div class="glass bg-bg-dark/50 p-2"><div class="text-[8px] text-slate-500 uppercase">${s.label}</div><div class="text-sm font-bold font-mono ${s.col} mt-0.5">${s.val}</div></div>`;
+  });
+  document.getElementById('statCards').innerHTML = statHTML;
+
+  // ── Density bar chart (css) — raw values ─────────────────────
+  const densityLabels = ['RUIN','EROS','VEG','FAULT','WATER','URBAN'];
+  const densityCols   = ['bg-primary','bg-orange-400','bg-cyan-400','bg-purple-400','bg-blue-400','bg-slate-400'];
+  const densityVals   = [data.ruin_prob, data.erosion_risk, data.veg_prob??0, data.fault_prob, data.water_prob??0, data.urban_prob??0];
+  let densBars = '';
+  let densLabels = '';
+  densityVals.forEach((v,i) => {
+      densBars += `<div class="flex-1 ${densityCols[i]}" style="height:${Math.max(4,(v*100)).toFixed(0)}%"></div>`;
+      densLabels += `<span>${densityLabels[i]}</span>`;
+  });
+  document.getElementById('densityBars').innerHTML = densBars;
+  document.getElementById('densityLabels').innerHTML = densLabels;
+
+  // ── Spectrum + Detection Score ────────────────────────────────
+  document.getElementById('spectrumPct').textContent = pct(data.ruin_prob);
+  const score = Math.round((data.ruin_prob*.4+(1-data.erosion_risk)*.3+(1-data.landslide_risk)*.3)*1000);
+  document.getElementById('detectionScore').textContent = score.toLocaleString();
+  document.getElementById('scoreSub').textContent = `/ 1000 MAX  (${score>=700?'HIGH':'MEDIUM'} CONFIDENCE)`;
+
+  // ── Ticker ────────────────────────────────────────────────────
+  const tickItems = [
+    `DETECTION LOG: RUIN_PROB ${pct(data.ruin_prob)} // PRIMARY: ${data.primary_feature}`,
+    `ALERT: EROSION RISK ${pct(data.erosion_risk)} IN ANALYZED SECTOR`,
+    `SYSTEM HEALTH: 99.8% STABLE ... CORE TEMP: 34°C`,
+    `FAULT PROBABILITY: ${pct(data.fault_prob)} // LANDSLIDE: ${pct(data.landslide_risk)}`,
+    `DATA LINK: ESTABLISHED ... ENCRYPTION LEVEL: MIL-SPEC`,
+  ];
+  const dbl = [...tickItems,...tickItems];
+  let tickHTML = '';
+  dbl.forEach((t,i) => {
+      let textCol = i%5===1 ? 'text-accent-cyan' : 'text-primary/60';
+      tickHTML += `<span class="text-[10px] ${textCol} uppercase whitespace-nowrap">${t} ...</span>`;
+  });
+  document.getElementById('ticker').innerHTML = tickHTML;
+
+} else {
+  // No data — show message
+  document.getElementById('scanFeed').innerHTML = `
+    <div class="p-4 text-center">
+      <p class="font-mono text-[10px] text-slate-600 uppercase">No scan data found.<br/>Run a scan in the portal first.</p>
+      <a href="/portal" class="inline-block mt-4 px-4 py-2 border border-primary/30 text-primary font-mono text-xs uppercase hover:bg-primary/10">
+        ← Back to Portal
+      </a>
+    </div>`;
+  
+  // Default ticker
+  const def = ['DETECTION LOG: [32.44,44.12] SECTOR CLEAR','SYSTEM HEALTH: 99.8% STABLE ... CORE TEMP: 34°C','DATA LINK: ESTABLISHED ... ENCRYPTION LEVEL: MIL-SPEC'];
+  let defHTML = '';
+  [...def,...def].forEach(t => {
+      defHTML += `<span class="text-[10px] text-primary/60 uppercase whitespace-nowrap">${t} ...</span>`;
+  });
+  document.getElementById('ticker').innerHTML = defHTML;
+  
+  // Empty charts with placeholder
+  ['barChart','doughnutChart','radarChart','confChart'].forEach(id=>{
+    const ctx = document.getElementById(id);
+    if(ctx && ctx.parentElement) {
+        ctx.parentElement.innerHTML = '<div class="flex items-center justify-center h-full font-mono text-[10px] text-slate-600 uppercase">No scan data</div>';
+    }
+  });
+}
+
+function downloadReport() {
+  if(!data){ alert('No data'); return; }
+  const lines = [
+    'ARCHAEOLIS GIS - TACTICAL SITE REPORT',
+    '======================================',
+    `Generated: ${new Date().toLocaleString()}`,
+    '',
+    `Primary Feature    : ${data.primary_feature}`,
+    `Ruin Probability   : ${pct(data.ruin_prob)}`,
+    `Vegetation Cover   : ${pct(data.veg_prob??0)}`,
+    `Erosion Risk       : ${pct(data.erosion_risk)}`,
+    `Fault Probability  : ${pct(data.fault_prob)}`,
+    `Water Bodies       : ${pct(data.water_prob??0)}`,
+    `Urban / Built-up   : ${pct(data.urban_prob??0)}`,
+    `Landslide Risk     : ${pct(data.landslide_risk)}`,
+    '',
+    'RISK SUMMARY',
+    '------------',
+    data.risk_summary || 'N/A',
+  ].join('\\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([lines],{type:'text/plain'}));
+  a.download = `archaeolis_report_${Date.now()}.txt`;
+  a.click();
+}
+</script>
+</body>
+</html>

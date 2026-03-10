@@ -1,0 +1,9 @@
+Image: data/processed\100694_sat.jpg, size=(224, 224)
+Ruin:     59.90%
+Veg:      1.01%
+Erosion:  94.04%
+Fault:    25.97%
+Water:    0.00%
+Urban:    0.00%
+Landslide:52.70%
+Seg overlay shape:(224, 224, 3) min:21 max:224
