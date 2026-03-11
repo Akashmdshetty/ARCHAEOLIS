@@ -1,5 +1,5 @@
+# No longer needed with opencv-python-headless
+# But keeping some basic libs just in case
 libgl1
-libglib2.0-0
 libsm6
 libxext6
-libxrender-dev
