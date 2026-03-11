@@ -186,11 +186,28 @@ class ArchaeologicalAnalyzer:
         fault_np   = fault_map[0, 0].cpu().numpy()
         fault_rgb  = self._apply_colormap(fault_np, 'cool', orig_size)
 
+        # ── Artifact probability from the model's detection head ────────────
+        # MultiTaskArchaeologist already outputs: detection[0, 0] = confidence heatmap
+        # Shape: [1, 5, H', W'] where channel 0 is raw confidence
+        detection   = outputs['detection']          # [1, 5, H', W']
+        conf_map    = torch.sigmoid(detection[0, 0])  # [H', W'] in [0,1]
+
+        # Fraction of cells with high confidence (>0.4) → artifact probability
+        high_conf_frac = float((conf_map > 0.4).float().mean())
+        # Mean confidence across all cells gives a smoother signal
+        mean_conf      = float(conf_map.mean())
+        # Blend: weighted more toward peak detections
+        artifact_prob  = float(0.6 * high_conf_frac + 0.4 * mean_conf)
+        # Ensure meaningful display range — clamp and scale slightly
+        artifact_prob  = float(min(artifact_prob * 2.5, 0.95))
+        artifact_prob  = max(artifact_prob, 0.01)
+
         # ── Human-readable summary ─────────────────────────────────────────
         summary = self._build_summary(ruin_prob, erosion_risk, landslide_risk, fault_prob)
 
         return {
             "ruin_probability":     ruin_prob,
+            "artifact_probability": artifact_prob,
             "erosion_risk":         erosion_risk,
             "landslide_risk":       landslide_risk,
             "fault_probability":    fault_prob,
@@ -209,6 +226,7 @@ class ArchaeologicalAnalyzer:
                 "erosion_risk":    erosion_risk,
                 "landslide_risk":  landslide_risk,
                 "fault_lines":     fault_prob,
+                "artifacts":       artifact_prob,
             }
         }
 
