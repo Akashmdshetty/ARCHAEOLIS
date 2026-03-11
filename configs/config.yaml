@@ -1,7 +1,7 @@
 # AI-Driven Archaeological Site Mapping — Configuration
 
 dataset:
-  raw_images_dir: "C:/Users/aakas/Downloads/images"   # your 803 source JPGs
+  raw_images_dir: "data/raw_images"   # relative path for hosting
   path: "data/processed"                               # where processed images go
   image_size: 224
 

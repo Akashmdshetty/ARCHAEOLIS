@@ -1,6 +1,6 @@
 import os
 
-file_path = "c:/Users/aakas/OneDrive/Desktop/AI-Driven Archaeological Site Mapping/dashboard/streamlit_app.py"
+file_path = "dashboard/streamlit_app.py"
 
 with open(file_path, "r", encoding="utf-8") as f:
     code = f.read()
